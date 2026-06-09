@@ -11,6 +11,20 @@ It is built for technical documentation, Obsidian vaults, MkDocs sites, RAG pipe
 
 ---
 
+## 🖼️ Screenshots
+
+![MarkForge main UI](docs/assets/markforge-main-ui.png)
+
+---
+
+![MarkForge batch UI](docs/assets/markforge-batch-ui.png)
+---
+![MarkForge batch UI](docs/assets/markforge-convert.png)
+---
+![MarkForge batch UI](docs/assets/markforge-report-ui.png)
+
+
+
 ## ✨ Features
 
 - 📄 Convert **DOCX**, **DOC**, **ODT** and **PDF** documents to Markdown
