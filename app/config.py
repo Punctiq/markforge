@@ -1,0 +1,64 @@
+"""
+app/config.py — Config class hierarchy Dev / Prod / Test.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+
+class BaseConfig:
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
+    JSON_SORT_KEYS: bool = False
+
+    # File handling
+    MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
+    MAX_CONTENT_LENGTH: int = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    UPLOAD_TEMP_DIR: Path = Path(os.getenv("UPLOAD_TEMP_DIR", "/tmp/markforge"))
+    ALLOWED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".odt", ".doc"})
+
+    # ── LLM — provider-agnostic ─────────────────────────────────────────────
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "")        # anthropic | openai | groq | ollama | ...
+    LLM_API_KEY:  str = os.getenv("LLM_API_KEY", "")         # provider API key
+    LLM_MODEL:    str = os.getenv("LLM_MODEL", "")           # model name
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")        # optional — Azure / Groq / Ollama endpoint
+
+    # Conversion backends
+    PANDOC_BIN:      str = os.getenv("PANDOC_BIN", "pandoc")
+    LIBREOFFICE_BIN: str = os.getenv("LIBREOFFICE_BIN", "soffice")
+
+    # Rate limiting
+    RATELIMIT_DEFAULT:     str = os.getenv("RATELIMIT_DEFAULT", "60 per minute")
+    RATELIMIT_STORAGE_URI: str = "memory://"
+
+    # CORS
+    CORS_ORIGINS: list[str] = os.getenv(
+        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
+    ).split(",")
+
+
+class DevelopmentConfig(BaseConfig):
+    DEBUG: bool = True
+    TESTING: bool = False
+
+
+class ProductionConfig(BaseConfig):
+    DEBUG: bool = False
+    TESTING: bool = False
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+
+
+class TestingConfig(BaseConfig):
+    DEBUG: bool = True
+    TESTING: bool = True
+    UPLOAD_TEMP_DIR: Path = Path("/tmp/markforge-test")
+    RATELIMIT_ENABLED: bool = False
+    LLM_API_KEY: str = "test-key"
+
+
+config_by_name: dict[str, type[BaseConfig]] = {
+    "development": DevelopmentConfig,
+    "production":  ProductionConfig,
+    "testing":     TestingConfig,
+}

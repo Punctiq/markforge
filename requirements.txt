@@ -1,0 +1,23 @@
+# ── MarkForge · production dependencies ───────────────────────────────────────
+
+# Web framework
+Flask==3.1.0
+python-dotenv==1.0.1
+
+# CORS & rate limiting
+Flask-Cors==5.0.0
+Flask-Limiter==3.9.0
+
+# Document conversion
+python-docx==1.1.2       # .docx native parsing
+pymupdf==1.25.5          # .pdf extraction (fitz)
+odfpy==1.4.1             # .odt native parsing
+
+# AI agent
+anthropic==0.49.0
+
+# Validation & serialization
+marshmallow==3.23.2
+
+# Utilities
+python-magic==0.4.27     # MIME type validation (defence-in-depth)

@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarkForge — Any document, clean Markdown</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink:         #14161F;
+      --ink-soft:    #3A3F4D;
+      --muted:       #7A8190;
+      --hair:        #E7E3DA;
+      --paper:       #FBFAF6;
+      --paper-2:     #F3F0E8;
+      --teal:        #0E9FA7;
+      --teal-bright: #15B8AE;
+      --teal-dim:    #0A7B82;
+      --teal-bg:     #E6F4F4;
+      --editor:      #161922;
+      --editor-2:    #1E222E;
+      --editor-line: #262B38;
+      --code-text:   #C7CEDA;
+      --code-head:   #34D7C6;
+      --code-accent: #F2B264;
+      --code-green:  #84D98C;
+      --code-pipe:   #586074;
+      --code-comment:#5C6678;
+      --radius:      12px;
+    }
+    html, body { height: 100%; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Topbar */
+    .topbar { display: flex; align-items: center; padding: 0 28px; height: 58px; background: #fff; border-bottom: 1px solid var(--hair); flex-shrink: 0; gap: 32px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(145deg, var(--teal-bright), var(--teal-dim)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 17px; letter-spacing: -1px; box-shadow: 0 4px 12px -4px rgba(14,159,167,.55); flex-shrink: 0; }
+    .brand-name { font-weight: 700; font-size: 17px; letter-spacing: -.3px; }
+    .brand-name span { color: var(--teal); }
+    .topbar-nav { display: flex; gap: 2px; margin-left: 8px; }
+    .topbar-nav a { padding: 6px 14px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--ink-soft); text-decoration: none; transition: background .15s, color .15s; }
+    .topbar-nav a:hover { background: var(--paper-2); color: var(--ink); }
+    .topbar-nav a.active { background: var(--teal-bg); color: var(--teal-dim); font-weight: 600; }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .forge-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid var(--hair); border-radius: 999px; background: var(--paper-2); color: var(--ink-soft); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+    .forge-pill strong { color: var(--ink); font-weight: 800; }
+    .forge-pill .spark { color: var(--code-accent); filter: drop-shadow(0 2px 4px rgba(242,178,100,.35)); }
+    .btn { font-family: inherit; font-size: 14px; font-weight: 600; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-ghost { background: none; color: var(--ink-soft); }
+    .btn-primary { background: var(--ink); color: #fff; }
+
+    /* Main */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar { width: 280px; flex-shrink: 0; border-right: 1px solid var(--hair); background: #fff; display: flex; flex-direction: column; padding: 20px 16px; gap: 16px; overflow-y: auto; }
+    .dropzone { border: 2px dashed var(--hair); border-radius: var(--radius); padding: 28px 16px; text-align: center; background: var(--paper); cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+    .dropzone.drag-over { border-color: var(--teal); background: var(--teal-bg); }
+    .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .drop-icon { width: 46px; height: 46px; border-radius: 12px; margin: 0 auto 12px; background: linear-gradient(150deg, var(--teal-bright), var(--teal-dim)); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px -6px rgba(14,159,167,.6); }
+    .drop-icon svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .drop-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+    .drop-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .drop-types { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .type-chip { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 5px; background: var(--paper-2); color: var(--ink-soft); border: 1px solid var(--hair); }
+    .options-label, .queue-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    .option-row { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; color: var(--ink-soft); }
+    .toggle { position: relative; width: 36px; height: 20px; background: var(--hair); border-radius: 999px; cursor: pointer; transition: background .2s; border: none; flex-shrink: 0; }
+    .toggle.on { background: var(--teal); }
+    .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+    .toggle.on::after { transform: translateX(16px); }
+    .select { width: 100%; font-family: inherit; font-size: 13px; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--hair); border-radius: 8px; padding: 8px 10px; outline: none; }
+    .select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(14,159,167,.12); }
+    .option-help { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: -8px; }
+    .ai-status-card { border: 1px solid var(--hair); background: var(--paper); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .ai-status-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+    .ai-status-pill { font-size: 10.5px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: var(--paper-2); color: var(--muted); border: 1px solid var(--hair); text-transform: none; letter-spacing: 0; }
+    .ai-status-pill.ok { background: var(--teal-bg); color: var(--teal-dim); border-color: rgba(14,159,167,.25); }
+    .ai-status-pill.warn { background: rgba(242,178,100,.12); color: #A86416; border-color: rgba(242,178,100,.35); }
+    .ai-status-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 1.4; }
+    .ai-status-row span:first-child { color: var(--muted); flex-shrink: 0; }
+    .ai-status-row span:last-child { color: var(--ink-soft); font-weight: 600; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .queue { display: flex; flex-direction: column; gap: 8px; }
+    .queue-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; background: var(--paper); border: 1px solid var(--hair); font-size: 13px; cursor: pointer; transition: border-color .15s; }
+    .queue-item:hover { border-color: var(--teal); }
+    .queue-item.active { border-color: var(--teal); background: var(--teal-bg); }
+    .qi-icon { width: 28px; height: 34px; border-radius: 5px; background: var(--paper-2); border: 1px solid var(--hair); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .qi-icon span { font-size: 9px; font-weight: 800; color: var(--muted); letter-spacing: .5px; }
+    .qi-ext-docx { background: #EAF1FB; border-color: #BBD3F2; } .qi-ext-docx span { color: #2E6FB5; }
+    .qi-ext-pdf  { background: #FDE8E8; border-color: #F7B8B8; } .qi-ext-pdf  span { color: #C53030; }
+    .qi-ext-odt  { background: #E8F5E9; border-color: #A5D6A7; } .qi-ext-odt  span { color: #2E7D32; }
+    .qi-ext-doc  { background: #E8EAF6; border-color: #9FA8DA; } .qi-ext-doc  span { color: #3949AB; }
+    .qi-info { flex: 1; min-width: 0; }
+    .qi-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+    .qi-size { font-size: 11px; color: var(--muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hair); }
+    .status-dot.converting { background: var(--teal); animation: pulse 1s infinite; }
+    .status-dot.done { background: var(--code-green); }
+    .status-dot.error { background: #F87171; }
+    .status-dot.cancelled { background: #A0AEC0; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+    .empty-queue { font-size: 13px; color: var(--muted); text-align: center; padding: 12px 0; line-height: 1.6; }
+
+    /* Workbench */
+    .workbench { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--paper); }
+    .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; gap: 16px; }
+    .welcome-icon { width: 72px; height: 72px; border-radius: 20px; margin-bottom: 4px; background: linear-gradient(145deg, var(--teal-bright), var(--teal-dim)); display: flex; align-items: center; justify-content: center; box-shadow: 0 16px 40px -16px rgba(14,159,167,.6); font-size: 36px; font-weight: 800; color: #fff; letter-spacing: -2px; }
+    .welcome h1 { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+    .welcome h1 span { color: var(--teal); }
+    .welcome p { font-size: 15px; color: var(--ink-soft); max-width: 400px; line-height: 1.6; }
+    .welcome-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+    .welcome-chip { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 7px; background: var(--paper-2); color: var(--ink-soft); border: 1px solid var(--hair); }
+    .welcome-chip.md { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+    /* Split */
+    .split { flex: 1; display: none; overflow: hidden; }
+    .split.visible { display: flex; }
+    .pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .pane-source { background: var(--paper); border-right: 1px solid var(--hair); }
+    .pane-output { background: var(--editor); }
+    .pane-header { display: flex; align-items: center; gap: 10px; padding: 12px 18px; flex-shrink: 0; font-size: 13px; }
+    .pane-source .pane-header { background: var(--paper-2); border-bottom: 1px solid var(--hair); }
+    .pane-output .pane-header { background: var(--editor-2); border-bottom: 1px solid var(--editor-line); }
+    .pane-filename { font-weight: 600; }
+    .pane-source .pane-filename { color: var(--ink); }
+    .pane-output .pane-filename { color: #EDF1F7; }
+    .pane-meta { color: var(--muted); font-size: 12px; }
+    .pane-output .pane-meta { color: #7E879A; }
+    .pane-status { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; font-family: 'Courier New', monospace; }
+    .pane-source .pane-status { color: var(--teal-dim); }
+    .pane-output .pane-status { color: var(--code-green); }
+    .pane-status-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .pane-source .pane-status-dot { background: var(--teal); }
+    .pane-output .pane-status-dot { background: var(--code-green); }
+    .pane-body { flex: 1; overflow-y: auto; padding: 24px 28px; }
+    .source-raw { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; text-align: center; color: var(--muted); }
+    .source-raw svg { width: 48px; height: 48px; opacity: .4; }
+    .md-output { font-family: 'Courier New', monospace; font-size: 13.5px; line-height: 1.9; color: var(--code-text); white-space: pre-wrap; word-break: break-word; }
+    .md-output .tok-head    { color: var(--code-head); font-weight: 700; }
+    .md-output .tok-mark    { color: var(--code-accent); }
+    .md-output .tok-pipe    { color: var(--code-pipe); }
+    .md-output .tok-comment { color: var(--code-comment); }
+    .md-output .tok-code    { color: var(--code-green); }
+    .converting-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: var(--code-text); padding: 24px; text-align: center; }
+    .mining-status { width: min(420px, 92%); display: grid; gap: 12px; align-items: center; justify-items: center; padding: 18px 20px; border: 1px solid rgba(242,178,100,.26); border-radius: 16px; background: radial-gradient(circle at 50% 0%, rgba(242,178,100,.12), rgba(22,25,34,.92) 48%, rgba(14,159,167,.08)); box-shadow: 0 18px 42px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04); overflow: hidden; position: relative; }
+    .mining-status::before { content: ''; position: absolute; inset: auto -10% 0; height: 42px; background: linear-gradient(180deg, transparent, rgba(0,0,0,.22)); pointer-events: none; }
+    .dwarf-miner { font-size: 44px; line-height: 1; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); animation: dwarf-dig .8s ease-in-out infinite; transform-origin: 50% 90%; }
+    .mining-text { min-height: 34px; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1.45; color: #D8DEE9; font-family: 'Courier New', monospace; font-weight: 700; text-wrap: balance; }
+    .mine-track { position: relative; width: 100%; height: 8px; border-radius: 999px; background: rgba(51,65,85,.95); overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.45); }
+    .mine-track span { position: absolute; top: 0; left: -38%; width: 38%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--code-accent), #FFE08A, transparent); animation: mine-progress 1.25s linear infinite; }
+    .mine-cart { font-size: 22px; animation: mine-cart-roll 1.25s linear infinite; align-self: stretch; text-align: left; opacity: .95; }
+    .mining-subtext { font-size: 11px; color: #7E879A; font-family: 'Courier New', monospace; letter-spacing: .2px; }
+    @keyframes dwarf-dig { 0%,100% { transform: translateY(0) rotate(0deg); } 28% { transform: translateY(1px) rotate(-13deg); } 62% { transform: translateY(-1px) rotate(9deg); } }
+    @keyframes mine-progress { from { left: -38%; } to { left: 100%; } }
+    @keyframes mine-cart-roll { from { transform: translateX(-10%); } to { transform: translateX(95%); } }
+    .error-panel { margin: 24px; padding: 16px 20px; background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.3); border-radius: 10px; color: #FCA5A5; font-size: 13.5px; line-height: 1.6; display: none; }
+    .error-panel.visible { display: block; }
+    .error-panel strong { font-weight: 700; }
+
+    /* Action bar */
+    .action-bar { display: none; align-items: center; gap: 12px; padding: 12px 18px; background: var(--editor-2); border-top: 1px solid var(--editor-line); flex-shrink: 0; }
+    .action-bar.visible { display: flex; }
+    .ai-badge { display: flex; align-items: center; gap: 8px; background: rgba(14,159,167,.12); border: 1px solid rgba(14,159,167,.3); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; color: var(--teal-bright); font-weight: 500; flex: 1; min-width: 0; }
+    .ai-badge svg { width: 14px; height: 14px; fill: var(--teal); flex-shrink: 0; }
+    .ai-badge-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ai-badge b { color: #fff; }
+    .token-badge { display: none; align-items: center; gap: 8px; background: rgba(242,178,100,.10); border: 1px solid rgba(242,178,100,.32); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; color: var(--code-accent); font-weight: 500; flex-shrink: 0; font-family: 'Courier New', monospace; }
+    .token-badge.visible { display: flex; }
+    .token-badge b { color: #fff; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .btn-copy, .btn-download { font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--editor-line); flex-shrink: 0; display: flex; align-items: center; gap: 6px; transition: background .15s; }
+    .btn-copy { background: var(--editor); color: #D7DEEA; }
+    .btn-copy:hover { background: var(--editor-line); }
+    .btn-download { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .btn-download:hover { background: var(--teal-dim); border-color: var(--teal-dim); }
+    .btn-cancel { font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.10); color: #FCA5A5; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, opacity .15s; }
+    .btn-cancel:hover { background: rgba(248,113,113,.18); }
+    .btn-cancel:disabled { opacity: .5; cursor: not-allowed; }
+
+
+    .quality-report-card { margin-top: 14px; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 10px; padding: 18px 20px; max-width: 620px; }
+    .quality-report-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+    .quality-risk { font-size: 10px; letter-spacing: .5px; border-radius: 999px; padding: 4px 8px; border: 1px solid var(--hair); }
+    .quality-risk.low { color: var(--teal-dim); background: rgba(14,159,167,.10); border-color: rgba(14,159,167,.28); }
+    .quality-risk.medium { color: #B7791F; background: rgba(242,178,100,.12); border-color: rgba(242,178,100,.32); }
+    .quality-risk.high { color: #F87171; background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.32); }
+    .quality-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin-bottom: 12px; font-size: 12.5px; }
+    .quality-grid span:nth-child(odd) { color: var(--muted); }
+    .quality-grid span:nth-child(even) { color: var(--ink); font-weight: 600; }
+    .quality-section-title { margin-top: 12px; margin-bottom: 6px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+    .quality-list { display: grid; gap: 6px; font-size: 12.5px; line-height: 1.45; }
+    .quality-item { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.42); border: 1px solid rgba(218,211,199,.65); color: var(--ink-soft); }
+    .quality-item b { color: var(--ink); }
+    .quality-muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+
+    /* Batch view */
+    .batch-view { flex: 1; overflow-y: auto; padding: 30px; display: none; background: var(--paper); }
+    .batch-view.visible { display: block; }
+    .batch-shell { max-width: 1100px; margin: 0 auto; display: grid; gap: 18px; }
+    .batch-hero { background: #fff; border: 1px solid var(--hair); border-radius: 16px; padding: 26px 28px; box-shadow: 0 12px 34px -28px rgba(20,22,31,.45); }
+    .batch-kicker { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: var(--teal-dim); margin-bottom: 8px; }
+    .batch-hero h1 { font-size: 28px; line-height: 1.15; letter-spacing: -.6px; margin-bottom: 10px; }
+    .batch-hero p { color: var(--ink-soft); line-height: 1.65; max-width: 780px; font-size: 14.5px; }
+    .batch-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .batch-stat { background: #fff; border: 1px solid var(--hair); border-radius: 14px; padding: 16px; }
+    .batch-stat-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
+    .batch-stat-value { color: var(--ink); font-size: 26px; font-weight: 800; letter-spacing: -.6px; }
+    .batch-card { background: #fff; border: 1px solid var(--hair); border-radius: 14px; padding: 18px; }
+    .batch-card h2 { font-size: 15px; margin-bottom: 10px; color: var(--ink); }
+    .batch-card p { font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+    .batch-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .batch-btn { font-family: inherit; font-size: 13px; font-weight: 700; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--hair); background: var(--paper-2); color: var(--ink-soft); cursor: pointer; transition: background .15s, opacity .15s; }
+    .batch-btn:hover { background: var(--teal-bg); color: var(--teal-dim); }
+    .batch-btn.primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+    .batch-btn.danger { background: rgba(248,113,113,.10); border-color: rgba(248,113,113,.32); color: #D94A4A; }
+    .batch-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .batch-table th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; padding: 10px 8px; border-bottom: 1px solid var(--hair); }
+    .batch-table td { padding: 11px 8px; border-bottom: 1px solid var(--hair); color: var(--ink-soft); vertical-align: middle; }
+    .batch-table tr:last-child td { border-bottom: none; }
+    .batch-file-name { color: var(--ink); font-weight: 700; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .batch-status { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; border: 1px solid var(--hair); background: var(--paper-2); color: var(--muted); }
+    .batch-status.done { background: var(--teal-bg); color: var(--teal-dim); border-color: rgba(14,159,167,.25); }
+    .batch-status.converting { background: rgba(242,178,100,.12); color: #A86416; border-color: rgba(242,178,100,.35); }
+    .batch-status.error { background: rgba(248,113,113,.12); color: #D94A4A; border-color: rgba(248,113,113,.32); }
+    .batch-status.cancelled { background: var(--paper-2); color: #6B7280; }
+    .batch-mini-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .batch-mini-actions button { font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--hair); background: var(--paper); color: var(--ink-soft); cursor: pointer; }
+    .batch-mini-actions button:hover { background: var(--teal-bg); color: var(--teal-dim); }
+    .batch-empty { border: 1px dashed var(--hair); border-radius: 14px; padding: 28px; text-align: center; color: var(--muted); background: var(--paper); line-height: 1.6; }
+    .batch-empty strong { color: var(--ink); }
+    @media (max-width: 1000px) { .batch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .batch-view { padding: 18px; } }
+    @media (max-width: 680px) { .batch-grid { grid-template-columns: 1fr; } .batch-table { font-size: 12px; } }
+
+
+    /* API docs view */
+    .api-view { flex: 1; overflow-y: auto; padding: 30px; display: none; background: var(--paper); }
+    .api-view.visible { display: block; }
+    .api-shell { max-width: 980px; margin: 0 auto; display: grid; gap: 18px; }
+    .api-hero { background: #fff; border: 1px solid var(--hair); border-radius: 16px; padding: 26px 28px; box-shadow: 0 12px 34px -28px rgba(20,22,31,.45); }
+    .api-kicker { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: var(--teal-dim); margin-bottom: 8px; }
+    .api-hero h1 { font-size: 28px; line-height: 1.15; letter-spacing: -.6px; margin-bottom: 10px; }
+    .api-hero p { color: var(--ink-soft); line-height: 1.65; max-width: 760px; font-size: 14.5px; }
+    .api-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .api-card { background: #fff; border: 1px solid var(--hair); border-radius: 14px; padding: 18px; }
+    .api-card.full { grid-column: 1 / -1; }
+    .api-card h2 { font-size: 15px; margin-bottom: 10px; color: var(--ink); }
+    .api-card p, .api-card li { font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+    .api-card ul { margin-left: 18px; display: grid; gap: 4px; }
+    .endpoint { display: inline-flex; align-items: center; gap: 8px; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 6px 10px; background: var(--paper-2); border: 1px solid var(--hair); color: var(--ink-soft); margin-bottom: 10px; }
+    .method { color: #fff; background: var(--teal); border-radius: 999px; padding: 2px 7px; font-size: 10px; letter-spacing: .6px; }
+    .method.get { background: #4A5568; }
+    .api-code { position: relative; background: var(--editor); color: var(--code-text); border: 1px solid var(--editor-line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.55; white-space: pre; }
+    .api-note { border-left: 3px solid var(--teal); background: var(--teal-bg); color: var(--teal-dim); padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.55; }
+    .api-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .api-pill { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 800; color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--hair); border-radius: 999px; padding: 5px 9px; }
+    @media (max-width: 900px) { .api-grid { grid-template-columns: 1fr; } .api-view { padding: 18px; } }
+
+    /* Statusbar */
+    .app-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--hair); background: #FBFCFD; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+    .app-footer b { color: var(--ink); font-weight: 800; }
+    .app-footer .footer-line { display: inline-flex; align-items: center; gap: 7px; }
+    .app-footer .footer-dwarf { color: var(--code-accent); font-weight: 900; }
+    @media (max-width: 900px) { .app-footer { align-items: flex-start; flex-direction: column; gap: 4px; } .topbar-right .forge-pill:first-child { display: none; } }
+    .statusbar { display: flex; align-items: center; gap: 20px; padding: 8px 20px; background: var(--ink); color: #AEB6C6; font-size: 12px; font-family: 'Courier New', monospace; flex-shrink: 0; }
+    .statusbar .s { display: flex; align-items: center; gap: 7px; }
+    .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--code-green); }
+    .sdot.idle { background: #4A5568; }
+    .sdot.converting { background: var(--teal); animation: pulse 1s infinite; }
+    .statusbar b { color: #EDF1F7; }
+    .statusbar .right { margin-left: auto; color: #4A5568; }
+    .toast { position: fixed; bottom: 52px; left: 50%; transform: translateX(-50%); background: #2D3748; color: #EDF1F7; padding: 10px 20px; border-radius: 9px; font-size: 13.5px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .2s; white-space: nowrap; z-index: 100; }
+    .toast.show { opacity: 1; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--hair); border-radius: 3px; }
+    .pane-output ::-webkit-scrollbar-thumb { background: var(--editor-line); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="brand" href="/"><div class="logo">M↓</div><span class="brand-name">Mark<span>Forge</span></span></a>
+    <nav class="topbar-nav">
+      <a class="active" href="#" data-nav-view="convert" id="navConvert">Convert</a>
+      <a href="#" data-nav-view="batch" id="navBatch">Batch</a>
+      <a href="#" data-nav-view="api" id="navApi">API</a>
+    </nav>
+    <div class="topbar-right" aria-label="MarkForge status">
+      <span class="forge-pill"><strong>Self-hosted</strong></span>
+      <span class="forge-pill"><span class="spark">⛏️</span> Forge ready</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".docx,.pdf,.odt,.doc" multiple>
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="drop-title">Drop files to convert</div>
+        <div class="drop-sub">Up to 25 files at once.<br>Processed in-session.</div>
+        <div class="drop-types">
+          <span class="type-chip">DOCX</span><span class="type-chip">PDF</span><span class="type-chip">ODT</span><span class="type-chip">DOC</span>
+        </div>
+      </div>
+
+      <div class="options-label">Options</div>
+      <div class="option-row">
+        <span>AI cleanup</span>
+        <button class="toggle on" id="toggleAI"></button>
+      </div>
+
+      <div class="option-row" style="align-items:flex-start;flex-direction:column;gap:6px">
+        <span>AI mode</span>
+        <select class="select" id="aiModeSelect">
+          <option value="safe" selected>Safe — preserve everything</option>
+          <option value="balanced">Balanced — stronger formatting cleanup</option>
+          <option value="aggressive">Aggressive — messy conversions</option>
+        </select>
+      </div>
+      <div class="option-help" id="aiModeHelp">Safe keeps technical documents intact and only removes obvious conversion artefacts.</div>
+
+      <div class="ai-status-card" id="aiStatusCard">
+        <div class="ai-status-title">
+          <span>AI status</span>
+          <span class="ai-status-pill warn" id="aiStatusPill">checking</span>
+        </div>
+        <div class="ai-status-row"><span>Cleanup</span><span id="aiStatusCleanup">Enabled</span></div>
+        <div class="ai-status-row"><span>Provider</span><span id="aiStatusProvider">Loading…</span></div>
+        <div class="ai-status-row"><span>Model</span><span id="aiStatusModel">Loading…</span></div>
+        <div class="ai-status-row"><span>Mode</span><span id="aiStatusMode">Safe</span></div>
+      </div>
+
+      <div class="queue-label">Files</div>
+      <div class="queue" id="queue">
+        <div class="empty-queue" id="emptyQueue">No files yet.<br>Drop or browse to start.</div>
+      </div>
+    </aside>
+
+    <div class="workbench">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">M↓</div>
+        <h1>Any document, <span>clean Markdown.</span></h1>
+        <p>Drop a file into the sidebar to convert it. Headings, tables and code blocks are kept intact.</p>
+        <div class="welcome-chips">
+          <span class="welcome-chip">DOCX</span><span class="welcome-chip">PDF</span><span class="welcome-chip">ODT</span><span class="welcome-chip">DOC</span><span class="welcome-chip md">→ MARKDOWN</span>
+        </div>
+      </div>
+
+      <div class="split" id="split">
+        <div class="pane pane-source">
+          <div class="pane-header">
+            <span class="pane-filename" id="sourceFilename">—</span>
+            <span class="pane-meta" id="sourceMeta"></span>
+            <span class="pane-status" id="sourceStatus" style="display:none"><span class="pane-status-dot"></span>parsed</span>
+          </div>
+          <div class="pane-body" id="sourceBody">
+            <div class="source-raw">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <p>Select a file to preview</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pane pane-output">
+          <div class="pane-header">
+            <span class="pane-filename" id="outputFilename">—</span>
+            <span class="pane-meta" id="outputMeta"></span>
+            <span class="pane-status" id="outputStatus" style="display:none">
+              <span class="pane-status-dot"></span><span id="outputStatusText">converted</span>
+            </span>
+          </div>
+          <div class="converting-state" id="convertingState" style="display:none">
+            <div class="mining-status" aria-live="polite">
+              <div class="dwarf-miner">🧙‍♂️⛏️</div>
+              <div class="mining-text" id="miningText">The tiny dwarf has entered the document mine...</div>
+              <div class="mine-track"><span></span></div>
+              <div class="mine-cart">🛒💎</div>
+              <div class="mining-subtext">MarkForge underground conversion crew is on duty</div>
+            </div>
+            <button class="btn-cancel" id="btnCancelActive" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Call the dwarf back
+            </button>
+          </div>
+          <div class="error-panel" id="errorPanel"><strong>Conversion failed.</strong> <span id="errorText"></span></div>
+          <div class="pane-body" id="outputBody" style="display:none">
+            <div class="md-output" id="mdOutput"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar" id="actionBar">
+        <div class="ai-badge" id="aiBadge" style="display:none">
+          <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.4L21 9l-5.5 4.1 1.9 7.3L12 17l-5.4 3.4 1.9-7.3L3 9l6.6-.6z"/></svg>
+          <span class="ai-badge-text" id="aiBadgeText"><b>AI cleanup</b> applied</span>
+        </div>
+        <div class="token-badge" id="tokenBadge"><b>Tokens</b> <span id="tokenBadgeText">0</span></div>
+        <div style="flex:1"></div>
+        <button class="btn-copy" id="btnCopy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <button class="btn-download" id="btnDownload">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" y1="3" x2="12" y2="13"/></svg>
+          Download .zip
+        </button>
+      </div>
+
+      <section class="batch-view" id="batchView" aria-label="MarkForge batch conversion">
+        <div class="batch-shell">
+          <div class="batch-hero">
+            <div class="batch-kicker">Batch forge</div>
+            <h1>Convert many documents in one run.</h1>
+            <p>Drop multiple files in the sidebar and MarkForge will process them in-session. Use this dashboard to track progress, cancel active conversions, download completed ZIP packages, or clear finished jobs.</p>
+          </div>
+
+          <div class="batch-grid">
+            <div class="batch-stat"><div class="batch-stat-label">Total</div><div class="batch-stat-value" id="batchTotal">0</div></div>
+            <div class="batch-stat"><div class="batch-stat-label">Converting</div><div class="batch-stat-value" id="batchConverting">0</div></div>
+            <div class="batch-stat"><div class="batch-stat-label">Done</div><div class="batch-stat-value" id="batchDone">0</div></div>
+            <div class="batch-stat"><div class="batch-stat-label">Errors</div><div class="batch-stat-value" id="batchErrors">0</div></div>
+          </div>
+
+          <div class="batch-card">
+            <h2>Batch controls</h2>
+            <p>Files are added from the sidebar dropzone. Completed files keep their own Markdown preview, ZIP package, token usage and quality report.</p>
+            <div class="batch-actions">
+              <button class="batch-btn primary" id="batchAddFiles">Add files</button>
+              <button class="batch-btn" id="batchStartPending">Start pending</button>
+              <button class="batch-btn danger" id="batchCancelRunning">Call all dwarves back</button>
+              <button class="batch-btn" id="batchDownloadDone">Download completed ZIPs</button>
+              <button class="batch-btn" id="batchClearFinished">Clear finished</button>
+            </div>
+          </div>
+
+          <div class="batch-card">
+            <h2>Batch queue</h2>
+            <div id="batchQueueView"></div>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="api-view" id="apiView" aria-label="MarkForge API documentation">
+        <div class="api-shell">
+          <div class="api-hero">
+            <div class="api-kicker">Developer API</div>
+            <h1>Convert documents to clean Markdown from your own tools.</h1>
+            <p>Use the MarkForge API to upload DOCX, PDF, ODT or DOC files and receive Markdown, ZIP packages with figures, token usage and quality reports. The browser UI uses the same endpoint documented here.</p>
+            <div class="api-pill-row">
+              <span class="api-pill">DOCX</span>
+              <span class="api-pill">PDF</span>
+              <span class="api-pill">ODT</span>
+              <span class="api-pill">DOC</span>
+              <span class="api-pill">Markdown</span>
+              <span class="api-pill">ZIP + figures</span>
+              <span class="api-pill">AI quality report</span>
+            </div>
+          </div>
+
+          <div class="api-grid">
+            <div class="api-card full">
+              <div class="endpoint"><span class="method">POST</span> /api/v1/convert</div>
+              <h2>Convert one document</h2>
+              <p>Send a multipart form request with a file and conversion options. For automation, use <code>output_format=zip</code>. For web preview or custom clients, use <code>output_format=both</code>.</p>
+            </div>
+
+            <div class="api-card">
+              <h2>Form fields</h2>
+              <ul>
+                <li><b>file</b> — required document upload.</li>
+                <li><b>ai_cleanup</b> — <code>true</code> or <code>false</code>.</li>
+                <li><b>ai_cleanup_mode</b> — <code>safe</code>, <code>balanced</code> or <code>aggressive</code>.</li>
+                <li><b>output_format</b> — <code>zip</code>, <code>markdown</code> or <code>both</code>.</li>
+              </ul>
+            </div>
+
+            <div class="api-card">
+              <h2>Output modes</h2>
+              <ul>
+                <li><b>zip</b> — binary ZIP download with Markdown, figures and reports.</li>
+                <li><b>markdown</b> — JSON response with Markdown preview only.</li>
+                <li><b>both</b> — JSON response with Markdown preview and base64 ZIP.</li>
+              </ul>
+            </div>
+
+            <div class="api-card full">
+              <h2>curl example — ZIP download</h2>
+              <pre class="api-code">curl -X POST http://127.0.0.1:5000/api/v1/convert \
+  -F "file=@CEB-HLD.docx" \
+  -F "ai_cleanup=true" \
+  -F "ai_cleanup_mode=safe" \
+  -F "output_format=zip" \
+  --output CEB-HLD_markforge.zip</pre>
+            </div>
+
+            <div class="api-card full">
+              <h2>curl example — JSON preview + ZIP base64</h2>
+              <pre class="api-code">curl -X POST http://127.0.0.1:5000/api/v1/convert \
+  -F "file=@CEB-HLD.docx" \
+  -F "ai_cleanup=true" \
+  -F "ai_cleanup_mode=balanced" \
+  -F "output_format=both"</pre>
+            </div>
+
+            <div class="api-card full">
+              <h2>Example JSON response for <code>output_format=both</code></h2>
+              <pre class="api-code">{
+  "markdown": "# Converted document...",
+  "markdown_filename": "CEB-HLD.md",
+  "zip_base64": "UEsDB...",
+  "zip_filename": "CEB-HLD_markforge.zip",
+  "stats": {
+    "ai_cleanup": true,
+    "ai_cleanup_mode": "safe",
+    "token_usage": {
+      "prompt_tokens": 9000,
+      "completion_tokens": 2500,
+      "total_tokens": 11500,
+      "llm_calls": 2
+    },
+    "quality_report": {
+      "risk_level": "low",
+      "content_risk_level": "low",
+      "structure_risk_level": "low",
+      "integrity_risk_level": "low",
+      "recommendation": "accept"
+    }
+  }
+}</pre>
+            </div>
+
+            <div class="api-card">
+              <div class="endpoint"><span class="method get">GET</span> /api/v1/ai/status</div>
+              <h2>Read AI configuration status</h2>
+              <p>Returns provider, model, supported modes and whether an API key is configured. The API key itself is never exposed.</p>
+            </div>
+
+            <div class="api-card">
+              <h2>AI behavior</h2>
+              <div class="api-note">When <code>ai_cleanup=false</code>, MarkForge runs deterministic conversion only. No LLM call is made, no AI audit is generated and no tokens are consumed.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="app-footer" aria-label="MarkForge credits">
+    <span class="footer-line"><b>MarkForge</b> · Forging Markdown from stubborn documents</span>
+    <span class="footer-line">Concept and implementation led by <b>Alexandru Raul</b> · Assisted by AI and a <span class="footer-dwarf">very determined dwarf</span> 🧙‍♂️⛏️</span>
+  </footer>
+
+  <div class="statusbar">
+    <span class="s"><span class="sdot idle" id="sdot"></span><b id="sStatus">Ready</b></span>
+    <span class="s" id="sInfo"></span>
+    <span class="right">Files processed in-session — never stored</span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const state = { files: [], activeId: null, aiCleanup: true, aiMode: 'safe', aiStatus: null, view: 'convert' };
+const miningMessages = [
+  'The tiny dwarf has entered the document mine...',
+  'Digging for Markdown gold...',
+  'Swinging the pickaxe at broken formatting...',
+  'Rescuing lost headings from the cave...',
+  'Loading images into the mine cart...',
+  'Carefully carrying tables across a shaky bridge...',
+  'Chasing rogue page numbers with a tiny hammer...',
+  'Polishing paragraphs with beard-powered precision...',
+  'Checking that no tokens fell into the abyss...',
+  'The dwarf found a rich Markdown vein...',
+  'Sorting captions, figures, and suspicious footers...',
+  'Fighting the evil PDF goblins...',
+  'Taming wild bullet lists...',
+  'Teaching tables to stand in straight lines...',
+  'Removing conversion dust from the tunnels...',
+  'The mine cart is almost full...',
+  'The dwarf is arguing with a stubborn heading...',
+  'Almost done — the Markdown treasure is near...',
+  'Final inspection by the underground documentation guild...',
+  'Packing your Markdown treasure chest...'
+];
+const $ = id => document.getElementById(id);
+
+function fmtSize(b) { if(b<1024)return b+' B'; if(b<1048576)return(b/1024).toFixed(1)+' KB'; return(b/1048576).toFixed(1)+' MB'; }
+function fmtTokens(n) { n = Number(n || 0); if (n >= 1000000) return (n/1000000).toFixed(2)+'M'; if (n >= 1000) return (n/1000).toFixed(1)+'k'; return String(n); }
+function ext(n) { return(n.split('.').pop()||'').toLowerCase(); }
+function uid() { return Math.random().toString(36).slice(2); }
+
+function showToast(msg, d=2000) {
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),d);
+}
+
+function setStatus(text, active=false) {
+  $('sStatus').textContent=text;
+  const dot=$('sdot');
+  dot.className='sdot'+(active?' converting':' idle');
+}
+
+function setView(view) {
+  state.view = ['convert', 'batch', 'api'].includes(view) ? view : 'convert';
+
+  document.querySelectorAll('[data-nav-view]').forEach(link => {
+    link.classList.toggle('active', link.dataset.navView === state.view);
+  });
+
+  const apiView = $('apiView');
+  const batchView = $('batchView');
+  if (apiView) apiView.classList.toggle('visible', state.view === 'api');
+  if (batchView) batchView.classList.toggle('visible', state.view === 'batch');
+
+  if (state.view === 'api') {
+    stopMining();
+    $('welcome').style.display = 'none';
+    $('split').classList.remove('visible');
+    $('actionBar').classList.remove('visible');
+    $('tokenBadge').classList.remove('visible');
+    setStatus('API docs');
+    $('sInfo').textContent = 'POST /api/v1/convert';
+    return;
+  }
+
+  if (state.view === 'batch') {
+    stopMining();
+    $('welcome').style.display = 'none';
+    $('split').classList.remove('visible');
+    $('actionBar').classList.remove('visible');
+    $('tokenBadge').classList.remove('visible');
+    setStatus('Batch forge');
+    $('sInfo').textContent = `${state.files.length} file(s) in queue`;
+    renderBatchView();
+    return;
+  }
+
+  if (apiView) apiView.classList.remove('visible');
+  if (batchView) batchView.classList.remove('visible');
+  renderWorkbench();
+}
+
+function prettyAIValue(value, fallback='Not configured') {
+  const v = String(value || '').trim();
+  return v || fallback;
+}
+
+function prettyMode(mode) {
+  const m = String(mode || 'safe').toLowerCase();
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+
+function renderAIStatus() {
+  const status = state.aiStatus || {};
+  const configured = Boolean(status.configured);
+  const cleanupEnabled = Boolean(state.aiCleanup);
+
+  $('aiStatusCleanup').textContent = cleanupEnabled ? 'Enabled' : 'Disabled';
+  $('aiStatusProvider').textContent = cleanupEnabled ? prettyAIValue(status.provider) : 'Bypassed';
+  $('aiStatusModel').textContent = cleanupEnabled ? prettyAIValue(status.model) : 'No AI call';
+  $('aiStatusMode').textContent = cleanupEnabled ? prettyMode(state.aiMode) : 'Off';
+
+  const pill = $('aiStatusPill');
+  pill.classList.remove('ok', 'warn');
+
+  if (!cleanupEnabled) {
+    pill.textContent = 'off';
+    pill.classList.add('warn');
+    return;
+  }
+
+  if (configured) {
+    pill.textContent = 'ready';
+    pill.classList.add('ok');
+    return;
+  }
+
+  pill.textContent = 'not configured';
+  pill.classList.add('warn');
+}
+
+async function loadAIStatus() {
+  try {
+    const resp = await fetch('/api/v1/ai/status');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    state.aiStatus = await resp.json();
+  } catch (err) {
+    state.aiStatus = { configured: false, provider: 'Unavailable', model: 'Unavailable' };
+  }
+
+  renderAIStatus();
+}
+
+function highlightMd(raw) {
+  return raw.split('\n').map(line => {
+    const e=line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if(/^#{1,6} /.test(line)) return`<span class="tok-head">${e}</span>`;
+    if(/^\|/.test(line)) return`<span class="tok-pipe">${e}</span>`;
+    if(/^>/.test(line)) return`<span class="tok-comment">${e}</span>`;
+    if(/^```/.test(line)) return`<span class="tok-code">${e}</span>`;
+    if(/^\s*[-*+] /.test(line)) return e.replace(/^(\s*)([-*+])( )/,'$1<span class="tok-mark">$2</span>$3');
+    return e;
+  }).join('\n');
+}
+
+function renderQueue() {
+  [...$('queue').querySelectorAll('.queue-item')].forEach(el=>el.remove());
+  const empty=$('emptyQueue');
+  if(!state.files.length){empty.style.display=''; renderBatchView(); return;}
+  empty.style.display='none';
+  state.files.forEach(entry=>{
+    const e=ext(entry.file.name);
+    const dotCls={pending:'',converting:'converting',done:'done',error:'error',cancelled:'cancelled'}[entry.status]||'';
+    const el=document.createElement('div');
+    el.className='queue-item'+(entry.id===state.activeId?' active':'');
+    el.innerHTML=`
+      <div class="qi-icon qi-ext-${e}"><span>${e.toUpperCase()}</span></div>
+      <div class="qi-info"><div class="qi-name">${entry.file.name}</div><div class="qi-size">${fmtSize(entry.file.size)}</div></div>
+      <div class="qi-status"><div class="status-dot ${dotCls}"></div></div>`;
+    el.addEventListener('click',()=>activateEntry(entry.id));
+    $('queue').appendChild(el);
+  });
+  renderBatchView();
+}
+
+function batchStats() {
+  const stats = { total: state.files.length, pending: 0, converting: 0, done: 0, error: 0, cancelled: 0 };
+  state.files.forEach(entry => {
+    if (stats[entry.status] !== undefined) stats[entry.status] += 1;
+  });
+  return stats;
+}
+
+function renderBatchView() {
+  const root = $('batchQueueView');
+  if (!root) return;
+
+  const stats = batchStats();
+  if ($('batchTotal')) $('batchTotal').textContent = stats.total;
+  if ($('batchConverting')) $('batchConverting').textContent = stats.converting;
+  if ($('batchDone')) $('batchDone').textContent = stats.done;
+  if ($('batchErrors')) $('batchErrors').textContent = stats.error + stats.cancelled;
+
+  const canStartPending = stats.pending > 0;
+  const canCancel = stats.converting > 0;
+  const canDownload = stats.done > 0;
+  const canClear = (stats.done + stats.error + stats.cancelled) > 0;
+
+  if ($('batchStartPending')) $('batchStartPending').disabled = !canStartPending;
+  if ($('batchCancelRunning')) $('batchCancelRunning').disabled = !canCancel;
+  if ($('batchDownloadDone')) $('batchDownloadDone').disabled = !canDownload;
+  if ($('batchClearFinished')) $('batchClearFinished').disabled = !canClear;
+
+  if (!state.files.length) {
+    root.innerHTML = `
+      <div class="batch-empty">
+        <strong>No batch files yet.</strong><br>
+        Drop several DOCX, PDF, ODT or DOC files in the sidebar, or click <b>Add files</b>.
+      </div>`;
+    return;
+  }
+
+  const rows = state.files.map(entry => {
+    const s = entry.result?.stats || {};
+    const usage = s.token_usage || {};
+    const risk = s.quality_report?.risk_level || s.quality_report?.overall_risk_level || '—';
+    const tokens = usage.total_tokens ? fmtTokens(usage.total_tokens) : '—';
+    const statusLabel = entry.status.charAt(0).toUpperCase() + entry.status.slice(1);
+    return `
+      <tr>
+        <td><div class="batch-file-name" title="${escHtml(entry.file.name)}">${escHtml(entry.file.name)}</div></td>
+        <td>${escHtml(fmtSize(entry.file.size))}</td>
+        <td><span class="batch-status ${escHtml(entry.status)}">${escHtml(statusLabel)}</span></td>
+        <td>${escHtml(entry.aiMode || state.aiMode)}</td>
+        <td>${escHtml(tokens)}</td>
+        <td>${escHtml(risk)}</td>
+        <td>
+          <div class="batch-mini-actions">
+            <button data-batch-action="view" data-entry-id="${entry.id}">View</button>
+            ${entry.status === 'converting' ? `<button data-batch-action="cancel" data-entry-id="${entry.id}">Cancel</button>` : ''}
+            ${entry.status === 'done' ? `<button data-batch-action="download" data-entry-id="${entry.id}">Download</button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  root.innerHTML = `
+    <table class="batch-table">
+      <thead>
+        <tr>
+          <th>File</th><th>Size</th><th>Status</th><th>AI mode</th><th>Tokens</th><th>Risk</th><th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function startPendingBatch() {
+  const pending = state.files.filter(entry => entry.status === 'pending');
+  if (!pending.length) { showToast('No pending files in the batch queue.'); return; }
+  pending.forEach(convertEntry);
+  showToast(`Started ${pending.length} pending file(s).`);
+  renderBatchView();
+}
+
+function cancelRunningBatch() {
+  const running = state.files.filter(entry => entry.status === 'converting');
+  if (!running.length) { showToast('No active dwarves to call back.'); return; }
+  running.forEach(cancelEntry);
+  showToast(`Called back ${running.length} dwarf crew(s).`);
+  renderBatchView();
+}
+
+function clearFinishedBatch() {
+  const finished = new Set(['done', 'error', 'cancelled']);
+  const before = state.files.length;
+  state.files = state.files.filter(entry => !finished.has(entry.status));
+  if (!state.files.find(entry => entry.id === state.activeId)) {
+    state.activeId = state.files[0]?.id || null;
+  }
+  renderQueue();
+  renderBatchView();
+  if (state.view === 'convert') renderWorkbench();
+  showToast(`Cleared ${before - state.files.length} finished file(s).`);
+}
+
+function downloadCompletedBatch() {
+  const done = state.files.filter(entry => entry.status === 'done' && entry.result?.zip_base64);
+  if (!done.length) { showToast('No completed ZIP files yet.'); return; }
+  done.forEach((entry, index) => {
+    setTimeout(() => downloadZipForEntry(entry), index * 250);
+  });
+  showToast(`Starting ${done.length} ZIP download(s).`);
+}
+
+function downloadZipForEntry(entry) {
+  if (!entry?.result?.zip_base64) return false;
+
+  const binary = atob(entry.result.zip_base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const blob = new Blob([bytes], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  a.href = url;
+  a.download = entry.result.zip_filename || entry.result.filename || 'markforge-output.zip';
+  a.click();
+
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+function renderWorkbench() {
+  if (state.view !== 'convert') return;
+  const entry=state.files.find(f=>f.id===state.activeId);
+  if(!entry){
+    $('welcome').style.display=''; $('split').classList.remove('visible');
+    $('actionBar').classList.remove('visible'); $('tokenBadge').classList.remove('visible'); setStatus('Ready'); $('sInfo').textContent=''; return;
+  }
+  $('welcome').style.display='none'; $('split').classList.add('visible');
+
+  // source pane
+  $('sourceFilename').textContent=entry.file.name;
+  $('sourceMeta').textContent='· '+fmtSize(entry.file.size);
+  $('sourceStatus').style.display=entry.status!=='pending'?'':'none';
+  renderSourceInfo(entry);
+
+  // output pane
+  $('outputFilename').textContent=entry.file.name.replace(/\.[^.]+$/,'.md');
+
+  if(entry.status==='pending'){
+    $('convertingState').style.display='none'; $('outputBody').style.display='none';
+    $('errorPanel').classList.remove('visible'); $('outputStatus').style.display='none';
+    $('outputMeta').textContent=''; $('actionBar').classList.remove('visible'); $('tokenBadge').classList.remove('visible'); setStatus('Waiting'); $('sInfo').textContent='';
+  }
+  if(entry.status==='converting'){
+    $('convertingState').style.display='flex'; $('outputBody').style.display='none';
+    $('errorPanel').classList.remove('visible'); $('outputStatus').style.display='none';
+    $('outputMeta').textContent=''; $('actionBar').classList.remove('visible'); $('tokenBadge').classList.remove('visible');
+    setStatus('Mining…',true); $('sInfo').textContent=entry.file.name; startMining();
+  }
+  if(entry.status==='done'&&entry.result){
+    stopMining();
+    $('convertingState').style.display='none'; $('errorPanel').classList.remove('visible');
+    $('outputBody').style.display=''; $('mdOutput').innerHTML=highlightMd(entry.result.markdown);
+    const s=entry.result.stats;
+    const usage = s.token_usage || {};
+    const totalTokens = Number(usage.total_tokens || 0);
+    const tokenText = totalTokens
+      ? ` · ${fmtTokens(totalTokens)} tokens · ${usage.llm_calls || 0} AI call(s)`
+      : '';
+    $('outputMeta').textContent=`· ${s.duration_ms}ms${tokenText}`;
+    $('outputStatusText').textContent=`converted in ${s.duration_ms}ms`;
+    $('outputStatus').style.display=''; $('actionBar').classList.add('visible');
+    if(s.ai_applied&&s.fixes&&s.fixes.length){
+      $('aiBadge').style.display='flex';
+      $('aiBadgeText').innerHTML=`<b>AI cleanup</b> · ${(s.ai_cleanup_mode || entry.aiMode || 'safe')} · ${s.fixes.slice(0,3).join(' · ')}`;
+    } else if(s.ai_applied){
+      $('aiBadge').style.display='flex'; $('aiBadgeText').innerHTML=`<b>AI cleanup</b> · ${(s.ai_cleanup_mode || entry.aiMode || 'safe')} mode`; 
+    } else { $('aiBadge').style.display='none'; }
+
+    if (totalTokens) {
+      $('tokenBadge').classList.add('visible');
+      $('tokenBadgeText').textContent = `${fmtTokens(totalTokens)} total · ${fmtTokens(usage.prompt_tokens)} in · ${fmtTokens(usage.completion_tokens)} out · ${usage.llm_calls || 0} call(s)`;
+    } else {
+      $('tokenBadge').classList.remove('visible');
+    }
+
+    setStatus('Done');
+    $('sInfo').textContent = totalTokens
+      ? `${entry.result.filename} · ${fmtSize(entry.result.markdown.length)} · ${fmtTokens(totalTokens)} tokens`
+      : `${entry.result.filename} · ${fmtSize(entry.result.markdown.length)}`;
+  }
+  if(entry.status==='error'){
+    stopMining();
+    $('convertingState').style.display='none'; $('outputBody').style.display='none';
+    $('outputStatus').style.display='none'; $('outputMeta').textContent='';
+    $('errorPanel').classList.add('visible'); $('errorText').textContent=' '+(entry.error||'Unknown error.');
+    $('actionBar').classList.remove('visible'); $('tokenBadge').classList.remove('visible'); setStatus('Error'); $('sInfo').textContent='';
+  }
+  if(entry.status==='cancelled'){
+    stopMining();
+    $('convertingState').style.display='none'; $('outputBody').style.display='none';
+    $('outputStatus').style.display='none'; $('outputMeta').textContent='';
+    $('errorPanel').classList.add('visible'); $('errorText').textContent=' Mission aborted. The dwarf has returned to the tavern.';
+    $('actionBar').classList.remove('visible'); $('tokenBadge').classList.remove('visible'); setStatus('Cancelled'); $('sInfo').textContent=entry.file.name;
+  }
+}
+
+
+function escHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderQualityReportCard(report) {
+  if (!report) return '';
+
+  const deterministic = report.deterministic_report || {};
+  const metrics = deterministic.metrics || {};
+  const before = metrics.before || {};
+  const after = metrics.after || {};
+  const ai = report.ai_report || null;
+  const risk = String(report.risk_level || deterministic.risk_level || 'low').toLowerCase();
+  const contentRisk = String(report.content_risk_level || deterministic.content_risk_level || 'low').toLowerCase();
+  const structureRisk = String(report.structure_risk_level || deterministic.structure_risk_level || 'low').toLowerCase();
+  const integrityRisk = String(report.integrity_risk_level || deterministic.integrity_risk_level || 'low').toLowerCase();
+  const recommendation = String(report.recommendation || deterministic.recommendation || 'accept').replaceAll('_', ' ');
+  const retention = Number(metrics.retention_ratio || 0);
+  const findings = deterministic.findings || [];
+
+  const findingHtml = findings.slice(0, 5).map(item => `
+    <div class="quality-item"><b>${escHtml(item.severity || 'info')}</b> / ${escHtml(item.topic || 'Document level')}: ${escHtml(item.description || '')}</div>
+  `).join('') || '<div class="quality-muted">No deterministic findings.</div>';
+
+  const aiSummary = ai
+    ? `<div class="quality-item"><b>AI audit</b> / ${escHtml(ai.scope || 'full')}: ${escHtml(ai.summary || 'AI quality audit completed.')}</div>`
+    : `<div class="quality-muted">AI audit not run. ${escHtml(report.ai_report_error || 'Deterministic report only.')}</div>`;
+
+  const missing = ai?.possible_missing_content?.length
+    ? ai.possible_missing_content.slice(0, 3).map(item => `<div class="quality-item"><b>${escHtml(item.severity || 'info')}</b> / ${escHtml(item.topic || 'Document level')}: ${escHtml(item.description || '')}</div>`).join('')
+    : '<div class="quality-muted">No obvious missing content reported.</div>';
+
+  const reordered = ai?.possible_reordered_content?.length
+    ? ai.possible_reordered_content.slice(0, 3).map(item => `<div class="quality-item"><b>${escHtml(item.severity || 'info')}</b> / ${escHtml(item.topic || 'Document level')}: ${escHtml(item.description || '')}</div>`).join('')
+    : '<div class="quality-muted">No obvious reordered content reported.</div>';
+
+  const grammar = ai?.grammar_text_changes?.length
+    ? ai.grammar_text_changes.slice(0, 3).map(item => `<div class="quality-item"><b>${escHtml(item.severity || 'info')}</b> / ${escHtml(item.topic || 'Document level')}: ${escHtml(item.description || '')}</div>`).join('')
+    : '<div class="quality-muted">No obvious grammar/text rewrites reported.</div>';
+
+  return `
+    <div class="quality-report-card">
+      <div class="quality-report-title">
+        <span>Quality report</span>
+        <span class="quality-risk ${risk}">${escHtml(risk)}</span>
+      </div>
+      <div class="quality-grid">
+        <span>Recommendation</span><span>${escHtml(recommendation)}</span>
+        <span>Content risk</span><span><span class="quality-risk ${contentRisk}">${escHtml(contentRisk)}</span></span>
+        <span>Structure risk</span><span><span class="quality-risk ${structureRisk}">${escHtml(structureRisk)}</span></span>
+        <span>Integrity risk</span><span><span class="quality-risk ${integrityRisk}">${escHtml(integrityRisk)}</span></span>
+        <span>Retention</span><span>${retention ? (retention * 100).toFixed(1) + '%' : 'n/a'}</span>
+        <span>Words</span><span>${before.word_count || 0} → ${after.word_count || 0}</span>
+        <span>Images</span><span>${before.image_count || 0} → ${after.image_count || 0}</span>
+        <span>Headings</span><span>${before.heading_count || 0} → ${after.heading_count || 0}</span>
+        <span>Table lines</span><span>${before.table_line_count || 0} → ${after.table_line_count || 0}</span>
+      </div>
+      <div class="quality-section-title">Deterministic findings</div>
+      <div class="quality-list">${findingHtml}</div>
+      <div class="quality-section-title">AI audit summary</div>
+      <div class="quality-list">${aiSummary}</div>
+      <div class="quality-section-title">Possible missing content</div>
+      <div class="quality-list">${missing}</div>
+      <div class="quality-section-title">Possible reordered content</div>
+      <div class="quality-list">${reordered}</div>
+      <div class="quality-section-title">Grammar / text changes</div>
+      <div class="quality-list">${grammar}</div>
+    </div>`;
+}
+
+function renderSourceInfo(entry) {
+  const e=ext(entry.file.name);
+  const warnings=entry.result?.stats?.warnings?.length
+    ?`<tr><td style="padding:6px 0;color:var(--muted);vertical-align:top">Warnings</td><td style="padding:6px 0;color:#F2B264;font-size:12px">${entry.result.stats.warnings.join('<br>')}</td></tr>`:'';
+  const usage = entry.result?.stats?.token_usage || {};
+  const qualityReport = entry.result?.stats?.quality_report || null;
+  const qualityCard = renderQualityReportCard(qualityReport);
+  const tokenRows = usage.total_tokens
+    ? `<tr><td style="padding:6px 0;color:var(--muted)">AI tokens</td><td style="padding:6px 0;color:var(--ink)">${fmtTokens(usage.total_tokens)} total / ${fmtTokens(usage.prompt_tokens)} in / ${fmtTokens(usage.completion_tokens)} out</td></tr>
+       <tr><td style="padding:6px 0;color:var(--muted)">AI calls</td><td style="padding:6px 0;color:var(--ink)">${usage.llm_calls || 0}</td></tr>`
+    : '';
+  $('sourceBody').innerHTML=`
+    <div style="padding-top:8px">
+      <div style="background:var(--paper-2);border:1px solid var(--hair);border-radius:10px;padding:20px 24px;max-width:520px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px">Document info</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+          <tr><td style="padding:6px 0;color:var(--muted);width:110px">Name</td><td style="padding:6px 0;color:var(--ink);font-weight:600">${entry.file.name}</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">Format</td><td style="padding:6px 0;color:var(--ink)">.${e.toUpperCase()}</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">Size</td><td style="padding:6px 0;color:var(--ink)">${fmtSize(entry.file.size)}</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">Status</td><td style="padding:6px 0;font-weight:600;color:${
+            entry.status==='done'?'var(--teal-dim)':entry.status==='error'?'#F87171':entry.status==='cancelled'?'#A0AEC0':entry.status==='converting'?'var(--teal)':'var(--muted)'
+          }">${entry.status.charAt(0).toUpperCase()+entry.status.slice(1)}</td></tr>
+          <tr><td style="padding:6px 0;color:var(--muted)">AI mode</td><td style="padding:6px 0;color:var(--ink)">${entry.aiMode || state.aiMode}</td></tr>
+          ${tokenRows}
+          ${warnings}
+        </table>
+      </div>
+      ${qualityCard}
+    </div>`;
+}
+
+let miningInterval = null;
+let miningIndex = 0;
+
+function startMining() {
+  const el = $('miningText');
+  if (!el) return;
+
+  if (miningInterval) clearInterval(miningInterval);
+
+  miningIndex = Math.floor(Math.random() * miningMessages.length);
+  el.textContent = miningMessages[miningIndex];
+
+  miningInterval = setInterval(() => {
+    miningIndex = (miningIndex + 1) % miningMessages.length;
+    el.textContent = miningMessages[miningIndex];
+  }, 2400);
+}
+
+function stopMining() {
+  if (miningInterval) clearInterval(miningInterval);
+  miningInterval = null;
+}
+
+function startDots(){startMining();}
+function stopDots(){stopMining();}
+
+function ingestFiles(fileList) {
+  const allowed=['docx','pdf','odt','doc'];
+  const newEntries=[];
+  for(const file of fileList){
+    if(!allowed.includes(ext(file.name))){showToast(`Skipped ${file.name} — unsupported.`);continue;}
+    const entry={file,id:uid(),status:'pending',result:null,error:null,aiMode:state.aiMode,controller:null};
+    state.files.push(entry); newEntries.push(entry);
+  }
+  if(!newEntries.length)return;
+  renderQueue();
+  if(!state.activeId||state.files.length===newEntries.length) activateEntry(newEntries[0].id);
+  newEntries.forEach(convertEntry);
+}
+
+function activateEntry(id){state.activeId=id;renderQueue();renderWorkbench();}
+
+async function convertEntry(entry) {
+  entry.status = 'converting';
+  entry.error = null;
+
+  if (state.activeId === entry.id) renderWorkbench();
+  renderQueue();
+
+  const controller = new AbortController();
+  entry.controller = controller;
+
+  const fd = new FormData();
+  fd.append('file', entry.file);
+  fd.append('ai_cleanup', state.aiCleanup ? 'true' : 'false');
+  fd.append('ai_cleanup_mode', entry.aiMode || state.aiMode || 'safe');
+
+  // Web UI needs markdown for preview and ZIP for final download with images.
+  fd.append('output_format', 'both');
+
+  try {
+    const resp = await fetch('/api/v1/convert', {
+      method: 'POST',
+      body: fd,
+      signal: controller.signal
+    });
+
+    const contentType = resp.headers.get('content-type') || '';
+
+    if (!resp.ok) {
+      let message = `HTTP ${resp.status}`;
+
+      if (contentType.includes('application/json')) {
+        const body = await resp.json().catch(() => ({}));
+        message = body.error || message;
+      } else {
+        const text = await resp.text().catch(() => '');
+        message = text || message;
+      }
+
+      throw new Error(message);
+    }
+
+    if (!contentType.includes('application/json')) {
+      throw new Error(
+        `Expected JSON response with markdown preview and ZIP payload, but received: ${contentType || 'unknown content type'}`
+      );
+    }
+
+    const data = await resp.json();
+
+    if (!data.markdown) {
+      throw new Error('Backend response does not contain markdown.');
+    }
+
+    if (!data.zip_base64) {
+      throw new Error('Backend response does not contain ZIP data.');
+    }
+
+    entry.result = data;
+    entry.status = 'done';
+    showToast(`Success! The dwarf found Markdown gold in ${entry.file.name}.`, 2600);
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      entry.status = 'cancelled';
+      entry.error = 'Mission aborted. The dwarf has returned to the tavern.';
+      showToast(`The dwarf abandoned ${entry.file.name} and returned to the tavern.`);
+    } else {
+      entry.status = 'error';
+      entry.error = err.message || 'The dwarf hit a cursed rock. Conversion failed.';
+    }
+  } finally {
+    entry.controller = null;
+  }
+
+  renderQueue();
+  renderBatchView();
+
+  if (state.activeId === entry.id) {
+    renderWorkbench();
+  }
+}
+
+function cancelEntry(entry) {
+  if (!entry || entry.status !== 'converting') return;
+
+  if (entry.controller) {
+    entry.controller.abort();
+    return;
+  }
+
+  entry.status = 'cancelled';
+  entry.error = 'Mission aborted. The dwarf has returned to the tavern.';
+  renderQueue();
+  if (state.activeId === entry.id) renderWorkbench();
+}
+
+$('btnCancelActive').addEventListener('click',()=>{
+  const e = state.files.find(f => f.id === state.activeId);
+  cancelEntry(e);
+});
+
+$('btnCopy').addEventListener('click',()=>{
+  const e=state.files.find(f=>f.id===state.activeId);
+  if(!e?.result)return;
+  navigator.clipboard.writeText(e.result.markdown)
+    .then(()=>showToast('Copied to clipboard!'))
+    .catch(()=>showToast('Copy failed.'));
+});
+
+$('btnDownload').addEventListener('click',()=>{
+  const e = state.files.find(f => f.id === state.activeId);
+  if (!e?.result) return;
+
+  // Prefer ZIP because it contains the Markdown file plus extracted images/figures.
+  if (downloadZipForEntry(e)) return;
+
+  // Fallback for markdown-only API responses.
+  const blob = new Blob([e.result.markdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  a.href = url;
+  a.download = e.result.markdown_filename || e.result.filename || 'markforge-output.md';
+  a.click();
+
+  URL.revokeObjectURL(url);
+});
+
+const dz=$('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');ingestFiles(e.dataTransfer.files);});
+$('fileInput').addEventListener('change',()=>{if($('fileInput').files.length)ingestFiles($('fileInput').files);$('fileInput').value='';});
+
+$('batchAddFiles')?.addEventListener('click', () => $('fileInput').click());
+$('batchStartPending')?.addEventListener('click', startPendingBatch);
+$('batchCancelRunning')?.addEventListener('click', cancelRunningBatch);
+$('batchDownloadDone')?.addEventListener('click', downloadCompletedBatch);
+$('batchClearFinished')?.addEventListener('click', clearFinishedBatch);
+
+$('batchQueueView')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-batch-action]');
+  if (!button) return;
+
+  const entry = state.files.find(item => item.id === button.dataset.entryId);
+  if (!entry) return;
+
+  const action = button.dataset.batchAction;
+
+  if (action === 'view') {
+    activateEntry(entry.id);
+    setView('convert');
+    return;
+  }
+
+  if (action === 'cancel') {
+    cancelEntry(entry);
+    renderBatchView();
+    return;
+  }
+
+  if (action === 'download') {
+    downloadZipForEntry(entry);
+  }
+});
+
+document.querySelectorAll('[data-nav-view]').forEach(link => {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    setView(link.dataset.navView);
+  });
+});
+
+$('toggleAI').addEventListener('click',()=>{
+  state.aiCleanup=!state.aiCleanup;
+  $('toggleAI').classList.toggle('on',state.aiCleanup);
+  $('aiModeSelect').disabled = !state.aiCleanup;
+  $('aiModeHelp').textContent = state.aiCleanup
+    ? aiModeDescription(state.aiMode)
+    : 'AI cleanup is disabled. Conversion will be deterministic only.';
+  renderAIStatus();
+});
+
+function aiModeDescription(mode) {
+  if (mode === 'aggressive') return 'Aggressive repairs messy Markdown more strongly, but backend validation still protects content and images.';
+  if (mode === 'balanced') return 'Balanced fixes more formatting issues while preserving content, images and technical details.';
+  return 'Safe keeps technical documents intact and only removes obvious conversion artefacts.';
+}
+
+$('aiModeSelect').addEventListener('change',()=>{
+  state.aiMode = $('aiModeSelect').value || 'safe';
+  $('aiModeHelp').textContent = aiModeDescription(state.aiMode);
+  renderAIStatus();
+});
+
+$('aiModeHelp').textContent = aiModeDescription(state.aiMode);
+renderAIStatus();
+loadAIStatus();
+
+renderQueue(); renderBatchView(); renderWorkbench();
+</script>
+</body>
+</html>
