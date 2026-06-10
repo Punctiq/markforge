@@ -20,12 +20,13 @@ class AbstractLLMClient(ABC):
         self.config = config
 
     @abstractmethod
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
         """Send a system + user prompt and return the model's text response.
 
         Args:
             system: System prompt string.
             user:   User message string.
+            max_tokens: Optional provider output token cap for this request.
 
         Returns:
             The model's text response as a plain string.

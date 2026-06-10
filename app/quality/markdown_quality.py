@@ -257,6 +257,83 @@ def _clip(text: str, max_chars: int) -> str:
     return text[:half].rstrip() + "\n\n...[middle omitted for audit prompt safety]...\n\n" + text[-half:].lstrip()
 
 
+
+
+def _estimate_tokens(text: str) -> int:
+    """Cheap conservative token estimate used before sending audit prompts.
+
+    This is intentionally simple. It avoids provider-specific tokenizers while
+    still preventing obviously oversized prompts from being submitted.
+    """
+    return max(1, (len(text or "") + 3) // 4)
+
+
+def _metric_summary(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact metrics object safe for LLM prompts.
+
+    The full deterministic metrics can contain every heading and every image
+    reference. In large PDFs this can become huge and can itself trigger a
+    context-length error. The AI audit only needs counts and representative
+    outlines, not the full raw lists.
+    """
+    headings = metrics.get("headings", []) or []
+    images = metrics.get("images", []) or []
+    return {
+        "char_count": metrics.get("char_count", 0),
+        "word_count": metrics.get("word_count", 0),
+        "heading_count": metrics.get("heading_count", 0),
+        "heading_outline_sample": _sections_outline(headings, limit=40),
+        "image_count": metrics.get("image_count", 0),
+        "image_reference_sample": images[:20],
+        "table_line_count": metrics.get("table_line_count", 0),
+        "link_count": metrics.get("link_count", 0),
+        "code_fence_count": metrics.get("code_fence_count", 0),
+        "code_fences_balanced": metrics.get("code_fences_balanced", True),
+    }
+
+
+def _compact_deterministic_report(report: dict[str, Any]) -> dict[str, Any]:
+    metrics = report.get("metrics", {}) or {}
+    before = metrics.get("before", {}) or {}
+    after = metrics.get("after", {}) or {}
+    findings = report.get("findings", []) or []
+    return {
+        "enabled": report.get("enabled", True),
+        "risk_level": report.get("risk_level", "low"),
+        "recommendation": report.get("recommendation", "accept"),
+        "content_risk_level": report.get("content_risk_level", "low"),
+        "structure_risk_level": report.get("structure_risk_level", "low"),
+        "integrity_risk_level": report.get("integrity_risk_level", "low"),
+        "metrics": {
+            "before": _metric_summary(before),
+            "after": _metric_summary(after),
+            "retention_ratio": metrics.get("retention_ratio", 1),
+            "word_count_delta": metrics.get("word_count_delta", 0),
+            "heading_count_delta": metrics.get("heading_count_delta", 0),
+            "image_count_delta": metrics.get("image_count_delta", 0),
+            "table_line_count_delta": metrics.get("table_line_count_delta", 0),
+        },
+        "findings": findings[:30],
+    }
+
+
+def _sample_document(text: str, max_chars: int) -> str:
+    """Create a beginning/middle/end sample for large-document AI audit."""
+    text = text or ""
+    if len(text) <= max_chars:
+        return text
+
+    part = max(500, max_chars // 3)
+    middle_start = max(0, (len(text) // 2) - (part // 2))
+    middle_end = min(len(text), middle_start + part)
+    return "\n\n".join([
+        text[:part].rstrip(),
+        "...[middle sample]...",
+        text[middle_start:middle_end].strip(),
+        "...[end sample]...",
+        text[-part:].lstrip(),
+    ])
+
 def _parse_ai_json(raw: str) -> dict[str, Any] | None:
     text = (raw or "").strip()
     match = list(_JSON_FENCE_RE.finditer(text))
@@ -286,16 +363,24 @@ def _ai_quality_report(
     except LLMError as exc:
         return None, token_usage, f"LLM client init failed; AI quality report skipped: {exc}"
 
-    max_chars = int(config.get("LLM_MAX_AI_QUALITY_REPORT_CHARS", 30_000))
-    combined = len(original_markdown) + len(final_markdown)
-    scope = "full" if combined <= max_chars else "sampled"
-    per_doc_limit = max_chars // 2
+    # AI audit must never submit the full document blindly. Large PDFs can
+    # easily exceed model context limits, especially when the deterministic
+    # report contains long heading/image lists. Use a compact report and a
+    # bounded beginning/middle/end sample instead.
+    safe_input_tokens = int(config.get("AI_QUALITY_SAFE_INPUT_TOKENS", 24_000))
+    max_output_tokens = int(config.get("AI_QUALITY_MAX_OUTPUT_TOKENS", 2_048))
+    sample_chars = int(config.get("AI_QUALITY_SAMPLE_CHARS", 16_000))
 
-    original_for_prompt = original_markdown if scope == "full" else _clip(original_markdown, per_doc_limit)
-    final_for_prompt = final_markdown if scope == "full" else _clip(final_markdown, per_doc_limit)
+    combined = len(original_markdown or "") + len(final_markdown or "")
+    scope = "full" if combined <= sample_chars else "sampled"
+    per_doc_limit = max(2_000, sample_chars // 2)
 
-    before = deterministic_report["metrics"]["before"]
-    after = deterministic_report["metrics"]["after"]
+    original_for_prompt = original_markdown if scope == "full" else _sample_document(original_markdown, per_doc_limit)
+    final_for_prompt = final_markdown if scope == "full" else _sample_document(final_markdown, per_doc_limit)
+
+    compact_report = _compact_deterministic_report(deterministic_report)
+    before = compact_report["metrics"]["before"]
+    after = compact_report["metrics"]["after"]
 
     system = """\
 You are a strict document conversion QA auditor for MarkForge.
@@ -315,14 +400,14 @@ Be conservative:
 AI cleanup mode: {mode}
 Audit scope: {scope}
 
-Deterministic comparison JSON:
-{json.dumps(deterministic_report, ensure_ascii=False, indent=2)}
+Compact deterministic comparison JSON:
+{json.dumps(compact_report, ensure_ascii=False, indent=2)}
 
 Original heading outline:
-{chr(10).join(_sections_outline(before.get('headings', [])))}
+{chr(10).join(before.get('heading_outline_sample', []))}
 
 Final heading outline:
-{chr(10).join(_sections_outline(after.get('headings', [])))}
+{chr(10).join(after.get('heading_outline_sample', []))}
 
 Original Markdown sample:
 --- ORIGINAL START ---
@@ -357,10 +442,82 @@ Return exactly this JSON structure:
 }}
 """
 
+    # Final guardrail: if the prompt is still too large after compacting,
+    # shrink the document samples once more. If it remains too large, skip AI
+    # audit gracefully and keep the deterministic report.
+    estimated_input_tokens = _estimate_tokens(system) + _estimate_tokens(user)
+    if estimated_input_tokens + max_output_tokens > safe_input_tokens:
+        reduced_limit = max(1_000, per_doc_limit // 3)
+        original_for_prompt = _sample_document(original_markdown, reduced_limit)
+        final_for_prompt = _sample_document(final_markdown, reduced_limit)
+        scope = "sampled-reduced"
+        user = f"""\
+AI cleanup mode: {mode}
+Audit scope: {scope}
+
+Compact deterministic comparison JSON:
+{json.dumps(compact_report, ensure_ascii=False, indent=2)}
+
+Original heading outline:
+{chr(10).join(before.get('heading_outline_sample', []))}
+
+Final heading outline:
+{chr(10).join(after.get('heading_outline_sample', []))}
+
+Original Markdown sample:
+--- ORIGINAL START ---
+{original_for_prompt}
+--- ORIGINAL END ---
+
+Final Markdown sample:
+--- FINAL START ---
+{final_for_prompt}
+--- FINAL END ---
+
+Return exactly this JSON structure:
+{{
+  "risk_level": "low | medium | high",
+  "recommendation": "accept | review_manually | reject_cleanup",
+  "summary": "short audit summary",
+  "possible_missing_content": [
+    {{"severity": "low | medium | high", "topic": "topic or section", "description": "what may be missing and why"}}
+  ],
+  "possible_reordered_content": [
+    {{"severity": "low | medium | high", "topic": "topic or section", "description": "what may have moved"}}
+  ],
+  "grammar_text_changes": [
+    {{"severity": "low | medium | high", "topic": "topic or section", "description": "possible grammar/text change"}}
+  ],
+  "formatting_changes": [
+    {{"severity": "low | medium | high", "topic": "topic or section", "description": "formatting-only change"}}
+  ],
+  "integrity_concerns": [
+    {{"severity": "low | medium | high", "topic": "topic or section", "description": "image/table/code/link concern"}}
+  ]
+}}
+"""
+        estimated_input_tokens = _estimate_tokens(system) + _estimate_tokens(user)
+
+    if estimated_input_tokens + max_output_tokens > safe_input_tokens:
+        return (
+            None,
+            token_usage,
+            "AI quality report skipped: document is too large for the configured AI audit token budget. "
+            "Deterministic quality checks completed successfully.",
+        )
+
     try:
-        raw = client.complete(system=system, user=user)
+        raw = client.complete(system=system, user=user, max_tokens=max_output_tokens)
         token_usage = _get_last_token_usage(client)
     except LLMError as exc:
+        msg = str(exc)
+        if "context_length_exceeded" in msg or "maximum context length" in msg:
+            return (
+                None,
+                token_usage,
+                "AI quality report skipped: provider context limit exceeded. "
+                "Deterministic quality checks completed successfully.",
+            )
         return None, token_usage, f"AI quality report failed: {exc}"
 
     parsed = _parse_ai_json(raw)
