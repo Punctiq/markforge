@@ -24,6 +24,14 @@ class BaseConfig:
     LLM_MODEL:    str = os.getenv("LLM_MODEL", "")           # model name
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")        # optional — Azure / Groq / Ollama endpoint
 
+    # LLM output limits
+    # General cleanup can still use a larger completion budget, while
+    # quality audit uses a smaller budget to avoid context overflow.
+    LLM_MAX_OUTPUT_TOKENS: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "8192"))
+    AI_QUALITY_MAX_OUTPUT_TOKENS: int = int(os.getenv("AI_QUALITY_MAX_OUTPUT_TOKENS", "2048"))
+    AI_QUALITY_SAFE_INPUT_TOKENS: int = int(os.getenv("AI_QUALITY_SAFE_INPUT_TOKENS", "24000"))
+    AI_QUALITY_SAMPLE_CHARS: int = int(os.getenv("AI_QUALITY_SAMPLE_CHARS", "16000"))
+
     # Conversion backends
     PANDOC_BIN:      str = os.getenv("PANDOC_BIN", "pandoc")
     LIBREOFFICE_BIN: str = os.getenv("LIBREOFFICE_BIN", "soffice")
