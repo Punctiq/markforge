@@ -48,7 +48,7 @@ class OpenAIClient(AbstractLLMClient):
             self._client = OpenAI(**kwargs)
         return self._client
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
         model = self.model or "gpt-4o"
         logger.debug("OpenAI-compat request: model=%s base_url=%s",
                      model, self.config.get("LLM_BASE_URL", "default"))
@@ -59,7 +59,7 @@ class OpenAIClient(AbstractLLMClient):
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
                 ],
-                max_tokens=8192,
+                max_tokens=int(max_tokens or self.config.get("LLM_MAX_OUTPUT_TOKENS", 8192)),
                 temperature=float(self.config.get("LLM_TEMPERATURE", 0)),
             )
 

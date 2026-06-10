@@ -37,13 +37,13 @@ class AnthropicClient(AbstractLLMClient):
             )
         return self._client
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
         model = self.model or "claude-sonnet-4-20250514"
         logger.debug("Anthropic request: model=%s", model)
         try:
             msg = self._sdk.messages.create(
                 model=model,
-                max_tokens=8192,
+                max_tokens=int(max_tokens or self.config.get("LLM_MAX_OUTPUT_TOKENS", 8192)),
                 temperature=float(self.config.get("LLM_TEMPERATURE", 0)),
                 system=system,
                 messages=[{"role": "user", "content": user}],
