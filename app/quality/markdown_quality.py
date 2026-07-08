@@ -21,11 +21,28 @@ from ..agent.llm_registry import get_llm_client
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_AI_QUALITY_SAFE_INPUT_TOKENS = 24_000
+DEFAULT_AI_QUALITY_MAX_OUTPUT_TOKENS = 2_048
+DEFAULT_AI_QUALITY_SAMPLE_CHARS = 16_000
+
 _HEADING_RE = re.compile(r"(?m)^(#{1,6})\s+(.+?)\s*$")
 _IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
 _LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\([^)]+\)")
 _JSON_FENCE_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 _TABLE_LINE_RE = re.compile(r"^\s*\|.+\|\s*$", re.MULTILINE)
+
+_CONTEXT_LIMIT_PATTERNS = (
+    "context_length_exceeded",
+    "maximum context length",
+    "context window exceeded",
+    "prompt is too long",
+    "too many tokens",
+    "input too large",
+    "request too large",
+)
+
+_AI_AUDIT_TOO_LARGE_MESSAGE = "AI audit skipped because the model input was too large."
+_AI_AUDIT_FAILED_MESSAGE = "AI audit failed, but deterministic quality checks completed."
 
 
 def _empty_token_usage() -> dict[str, int]:
@@ -268,6 +285,23 @@ def _estimate_tokens(text: str) -> int:
     return max(1, (len(text or "") + 3) // 4)
 
 
+def _config_positive_int(config: dict, key: str, default: int) -> int:
+    try:
+        value = int(config.get(key, default))
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s=%r; using default %s.", key, config.get(key), default)
+        return default
+    if value <= 0:
+        logger.warning("Invalid %s=%r; using default %s.", key, value, default)
+        return default
+    return value
+
+
+def _is_context_length_error(exc: BaseException | str) -> bool:
+    msg = str(exc).lower()
+    return any(pattern in msg for pattern in _CONTEXT_LIMIT_PATTERNS)
+
+
 def _metric_summary(metrics: dict[str, Any]) -> dict[str, Any]:
     """Return a compact metrics object safe for LLM prompts.
 
@@ -361,15 +395,28 @@ def _ai_quality_report(
     try:
         client = get_llm_client(config)
     except LLMError as exc:
-        return None, token_usage, f"LLM client init failed; AI quality report skipped: {exc}"
+        logger.warning("AI quality report client init failed: %s", exc)
+        return None, token_usage, _AI_AUDIT_FAILED_MESSAGE
 
     # AI audit must never submit the full document blindly. Large PDFs can
     # easily exceed model context limits, especially when the deterministic
     # report contains long heading/image lists. Use a compact report and a
     # bounded beginning/middle/end sample instead.
-    safe_input_tokens = int(config.get("AI_QUALITY_SAFE_INPUT_TOKENS", 24_000))
-    max_output_tokens = int(config.get("AI_QUALITY_MAX_OUTPUT_TOKENS", 2_048))
-    sample_chars = int(config.get("AI_QUALITY_SAMPLE_CHARS", 16_000))
+    safe_input_tokens = _config_positive_int(
+        config,
+        "AI_QUALITY_SAFE_INPUT_TOKENS",
+        DEFAULT_AI_QUALITY_SAFE_INPUT_TOKENS,
+    )
+    max_output_tokens = _config_positive_int(
+        config,
+        "AI_QUALITY_MAX_OUTPUT_TOKENS",
+        DEFAULT_AI_QUALITY_MAX_OUTPUT_TOKENS,
+    )
+    sample_chars = _config_positive_int(
+        config,
+        "AI_QUALITY_SAMPLE_CHARS",
+        DEFAULT_AI_QUALITY_SAMPLE_CHARS,
+    )
 
     combined = len(original_markdown or "") + len(final_markdown or "")
     scope = "full" if combined <= sample_chars else "sampled"
@@ -502,23 +549,24 @@ Return exactly this JSON structure:
         return (
             None,
             token_usage,
-            "AI quality report skipped: document is too large for the configured AI audit token budget. "
-            "Deterministic quality checks completed successfully.",
+            _AI_AUDIT_TOO_LARGE_MESSAGE,
         )
 
     try:
         raw = client.complete(system=system, user=user, max_tokens=max_output_tokens)
         token_usage = _get_last_token_usage(client)
     except LLMError as exc:
-        msg = str(exc)
-        if "context_length_exceeded" in msg or "maximum context length" in msg:
+        logger.warning("AI quality report failed: %s", exc)
+        if _is_context_length_error(exc):
             return (
                 None,
                 token_usage,
-                "AI quality report skipped: provider context limit exceeded. "
-                "Deterministic quality checks completed successfully.",
+                _AI_AUDIT_TOO_LARGE_MESSAGE,
             )
-        return None, token_usage, f"AI quality report failed: {exc}"
+        return None, token_usage, _AI_AUDIT_FAILED_MESSAGE
+    except Exception as exc:
+        logger.exception("Unexpected AI quality report failure: %s", exc)
+        return None, token_usage, _AI_AUDIT_FAILED_MESSAGE
 
     parsed = _parse_ai_json(raw)
     if not parsed:
@@ -589,13 +637,17 @@ def build_quality_report(
     }
 
     if ai_cleanup_requested and config is not None:
-        ai_report, token_usage, error = _ai_quality_report(
-            config=config,
-            original_markdown=original_markdown,
-            final_markdown=final_markdown,
-            deterministic_report=deterministic,
-            mode=mode,
-        )
+        try:
+            ai_report, token_usage, error = _ai_quality_report(
+                config=config,
+                original_markdown=original_markdown,
+                final_markdown=final_markdown,
+                deterministic_report=deterministic,
+                mode=mode,
+            )
+        except Exception as exc:
+            logger.exception("Unexpected AI quality audit error: %s", exc)
+            ai_report, token_usage, error = None, _empty_token_usage(), _AI_AUDIT_FAILED_MESSAGE
         report["ai_report"] = ai_report
         report["ai_report_error"] = error
         report["token_usage"] = token_usage
