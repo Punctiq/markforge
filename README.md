@@ -102,17 +102,69 @@ http://localhost:5000
 
 ## 🐳 Docker
 
-```bash
-docker compose up -d --build
-```
-
-Then open:
+MarkForge's Docker setup is intended for production behind HAProxy and Cloudflare:
 
 ```text
-http://localhost:5000
+Cloudflare -> HAProxy bare metal -> 127.0.0.1:8010 -> Docker -> Gunicorn -> Flask
 ```
 
-> 📝 Docker support may depend on your local `Dockerfile` / `docker-compose.yml` setup.
+Build and run:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Logs and health:
+
+```bash
+docker compose logs -f markforge
+curl http://127.0.0.1:8010/api/v1/health
+```
+
+The compose file binds MarkForge only on the host loopback interface:
+
+```text
+127.0.0.1:8010:5000
+```
+
+HAProxy should expose the public HTTPS domain and route to `127.0.0.1:8010`.
+
+Production `.env` checklist:
+
+```env
+FLASK_ENV=production
+AUTH_ENABLED=true
+SESSION_COOKIE_SECURE=true
+TRUST_PROXY=true
+GOOGLE_OAUTH_REDIRECT_URI=https://markforge.alexandru-raul.ro/auth/callback
+AUTH_ALLOWED_EMAILS=your-email@example.com
+SECRET_KEY=<strong random value>
+UPLOAD_TEMP_DIR=/tmp/markforge
+CORS_ORIGINS=https://markforge.alexandru-raul.ro
+```
+
+Keep `.env` local and never commit real Google OAuth credentials, LLM API keys, or `SECRET_KEY`.
+
+In Google Cloud Console, add this authorized redirect URI:
+
+```text
+https://markforge.alexandru-raul.ro/auth/callback
+```
+
+Concise HAProxy backend example:
+
+```haproxy
+backend markforge_backend
+    mode http
+    option forwardfor
+    http-request set-header X-Forwarded-Proto https
+    http-request set-header X-Forwarded-Host %[req.hdr(Host)]
+    http-request set-header X-Forwarded-Port 443
+    option httpchk GET /api/v1/health
+    http-check expect status 200
+    server markforge 127.0.0.1:8010 check
+```
 
 ---
 
