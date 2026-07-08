@@ -28,6 +28,7 @@ def test_generic_broken_caption_cleanup():
         [
             "*Figure **12**: **H**igh-level architectural diagram of Example **S**ervices*",
             "*Table **4**: Version History*",
+            "*Figure** 2**: **Management subscription** service elements *",
         ]
     )
 
@@ -37,6 +38,7 @@ def test_generic_broken_caption_cleanup():
         [
             "*Figure 12: High-level architectural diagram of Example Services*",
             "*Table 4: Version History*",
+            "*Figure 2: Management subscription service elements*",
         ]
     )
 

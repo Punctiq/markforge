@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})(\s+)(.+?)(\s*)$")
-_ITALIC_CAPTION_RE = re.compile(r"^(\s*)\*((?:Figure|Table)\s+.+?)\*(\s*)$", re.IGNORECASE)
+_ITALIC_CAPTION_RE = re.compile(r"^(\s*)\*((?:Figure|Table).+?)\*(\s*)$", re.IGNORECASE)
 _IMAGE_LINK_RE = re.compile(r"^\s*!\[[^\]]*]\([^)]+\)\s*$")
 _MARKDOWN_LINK_RE = re.compile(r"!?\[[^\]]*]\([^)]+\)")
 _TABLE_LINE_RE = re.compile(r"^\s*\|")
