@@ -20,12 +20,14 @@ from flask import current_app, jsonify, request, send_file
 import base64
 import io
 
+from ...auth.guards import login_required_api
 from ...services.conversion_service import ConversionService
 from ...services.file_service import FileService
 from . import bp
 
 
 @bp.get("/ai/status")
+@login_required_api
 def ai_status() -> tuple:
     """Return the active AI cleanup configuration for the web UI.
 
@@ -49,6 +51,7 @@ def ai_status() -> tuple:
 
 
 @bp.post("/convert")
+@login_required_api
 def convert() -> tuple:
     # ── Validate file presence ──────────────────────────────────────────────
     if "file" not in request.files:
