@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Access denied · MarkForge AI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #111827;
+      --muted: #6b7280;
+      --panel: #ffffff;
+      --page: #f6f6fe;
+      --line: #e8e7f2;
+      --violet: #6d5dfc;
+      --violet-dark: #5142db;
+      --danger: #dc2626;
+      --danger-soft: #fef2f2;
+      --hero-a: #111930;
+      --hero-b: #141b36;
+      --hero-c: #3b228f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--page);
+    }
+
+    .auth-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
+    }
+
+    .hero-panel {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      padding: clamp(40px, 6vw, 86px);
+      color: #fff;
+      background:
+        radial-gradient(circle at 18% 22%, rgba(124, 92, 255, 0.58), transparent 15%),
+        radial-gradient(circle at 24% 56%, rgba(255, 255, 255, 0.16), transparent 24%),
+        linear-gradient(150deg, var(--hero-a) 0%, var(--hero-b) 56%, var(--hero-c) 100%);
+    }
+
+    .hero-panel::before,
+    .hero-panel::after {
+      position: absolute;
+      content: "";
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transform: rotate(-18deg);
+      pointer-events: none;
+    }
+
+    .hero-panel::before {
+      inset: 17% auto auto -10%;
+      width: 78%;
+      height: 24%;
+      background: rgba(255, 255, 255, 0.035);
+      border-radius: 36px;
+    }
+
+    .hero-panel::after {
+      right: -30%;
+      bottom: 8%;
+      width: 92%;
+      height: 30%;
+      background: rgba(109, 93, 252, 0.16);
+      border-radius: 42px;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 570px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 92px;
+      font-weight: 700;
+      letter-spacing: 0;
+      font-size: 1.05rem;
+    }
+
+    .brand-mark,
+    .security-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #7c5cff, #4fd1c5);
+      box-shadow: 0 18px 40px rgba(79, 209, 197, 0.18);
+    }
+
+    .brand-mark svg,
+    .security-icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    h1 {
+      max-width: 620px;
+      margin: 0;
+      font-size: clamp(2.45rem, 5vw, 4.85rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 540px;
+      margin: 26px 0 42px;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: clamp(1rem, 1.6vw, 1.22rem);
+      line-height: 1.65;
+    }
+
+    .feature-list {
+      display: grid;
+      gap: 16px;
+      margin: 0 0 72px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: rgba(255, 255, 255, 0.88);
+      font-weight: 600;
+    }
+
+    .check {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #111930;
+      background: #75e4c3;
+      font-size: 0.92rem;
+      font-weight: 900;
+    }
+
+    .privacy-note {
+      max-width: 420px;
+      padding-left: 18px;
+      border-left: 3px solid rgba(117, 228, 195, 0.85);
+      color: rgba(255, 255, 255, 0.72);
+      line-height: 1.55;
+    }
+
+    .privacy-note strong {
+      display: block;
+      color: #fff;
+      margin-bottom: 3px;
+    }
+
+    .denied-panel {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 48px 28px;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(109, 93, 252, 0.08), transparent 18%),
+        linear-gradient(180deg, #f6f6fe 0%, #fafafe 100%);
+    }
+
+    .denied-card {
+      width: min(100%, 470px);
+      padding: 48px;
+      text-align: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: 0 24px 70px rgba(35, 31, 89, 0.10);
+    }
+
+    .security-icon {
+      margin: 0 auto 28px;
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      color: #fff;
+      background: linear-gradient(135deg, #ef4444, #7c5cff);
+    }
+
+    .denied-card h2 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .denied-card p {
+      margin: 16px auto 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+
+    .denied-message {
+      max-width: 360px;
+    }
+
+    .hint {
+      display: block;
+      margin: 18px 0 30px;
+      padding: 14px 16px;
+      border: 1px solid #fee2e2;
+      border-radius: 14px;
+      color: #991b1b;
+      background: var(--danger-soft);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .primary-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 56px;
+      padding: 0 20px;
+      border-radius: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--violet), var(--violet-dark));
+      box-shadow: 0 16px 32px rgba(109, 93, 252, 0.28);
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .primary-button:hover,
+    .primary-button:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 20px 38px rgba(109, 93, 252, 0.34);
+      outline: none;
+    }
+
+    .primary-button svg {
+      width: 19px;
+      height: 19px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .secondary-link {
+      display: inline-block;
+      margin-top: 18px;
+      color: var(--violet-dark);
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .secondary-link:hover,
+    .secondary-link:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
+
+    .card-footer {
+      margin-top: 42px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      color: #9aa0ae;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .auth-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-panel {
+        min-height: auto;
+        padding: 42px 24px;
+      }
+
+      .brand {
+        margin-bottom: 48px;
+      }
+
+      .feature-list {
+        margin-bottom: 36px;
+      }
+
+      .denied-panel {
+        min-height: auto;
+        padding: 34px 18px 48px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .denied-card {
+        padding: 34px 22px;
+        border-radius: 18px;
+      }
+
+      .hero-panel {
+        padding: 34px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="hero-panel" aria-label="MarkForge AI introduction">
+      <div class="hero-content">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M14 4l6 6-9 9H5v-6l9-9z"></path><path d="M13 5l6 6"></path></svg>
+          </span>
+          <span>MarkForge AI</span>
+        </div>
+
+        <h1>Private document conversion, protected by Google sign-in.</h1>
+        <p class="hero-copy">Secure Markdown conversion with AI cleanup, quality checks, and ZIP export&mdash;so your content stays private and production-ready.</p>
+
+        <ul class="feature-list" aria-label="MarkForge features">
+          <li><span class="check" aria-hidden="true">&#10003;</span><span>Smart document conversion</span></li>
+          <li><span class="check" aria-hidden="true">&#10003;</span><span>AI cleanup &amp; quality checks</span></li>
+          <li><span class="check" aria-hidden="true">&#10003;</span><span>Markdown / ZIP export</span></li>
+        </ul>
+
+        <p class="privacy-note"><strong>Your documents stay private.</strong>Processed securely and not stored.</p>
+      </div>
+    </section>
+
+    <section class="denied-panel" aria-label="Access denied">
+      <div class="denied-card">
+        <div class="security-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>
+        </div>
+        <h2>Access denied</h2>
+        <p class="denied-message">This Google account is not allowed to access this MarkForge instance.</p>
+        <span class="hint">Use an allowlisted Google account or update AUTH_ALLOWED_EMAILS.</span>
+
+        <a class="primary-button" href="{{ url_for('auth.login') }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+          <span>Back to sign in</span>
+        </a>
+        <a class="secondary-link" href="{{ url_for('auth.logout') }}">Try a different Google account</a>
+
+        <div class="card-footer">No sensitive details are shown for security reasons.</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
