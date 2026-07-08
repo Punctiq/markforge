@@ -8,6 +8,14 @@ import os
 from pathlib import Path
 
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 class BaseConfig:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
     JSON_SORT_KEYS: bool = False
@@ -27,7 +35,8 @@ class BaseConfig:
     # LLM output limits
     # General cleanup can still use a larger completion budget, while
     # quality audit uses a smaller budget to avoid context overflow.
-    LLM_MAX_OUTPUT_TOKENS: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "8192"))
+    LLM_MAX_OUTPUT_TOKENS: int = _int_env("LLM_MAX_OUTPUT_TOKENS", 8192)
+    LLM_CLEANUP_CONTEXT_WINDOW_TOKENS: int = _int_env("LLM_CLEANUP_CONTEXT_WINDOW_TOKENS", 32000)
     AI_QUALITY_MAX_OUTPUT_TOKENS: int = int(os.getenv("AI_QUALITY_MAX_OUTPUT_TOKENS", "2048"))
     AI_QUALITY_SAFE_INPUT_TOKENS: int = int(os.getenv("AI_QUALITY_SAFE_INPUT_TOKENS", "24000"))
     AI_QUALITY_SAMPLE_CHARS: int = int(os.getenv("AI_QUALITY_SAMPLE_CHARS", "16000"))
