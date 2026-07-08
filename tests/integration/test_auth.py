@@ -25,6 +25,7 @@ def test_auth_disabled_keeps_current_behavior():
     client = make_app(auth_enabled=False).test_client()
 
     assert client.get("/").status_code == 200
+    assert client.get("/auth/login").headers["Location"] == "/"
     response = client.post("/api/v1/convert", data={}, content_type="multipart/form-data")
     assert response.status_code == 400
 
@@ -34,6 +35,62 @@ def test_unauthenticated_index_redirects_to_login(auth_client):
 
     assert response.status_code == 302
     assert "/auth/login" in response.headers["Location"]
+
+
+def test_login_page_renders_for_unauthenticated_user(auth_client):
+    response = auth_client.get("/auth/login")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "MarkForge AI" in html
+    assert "Continue with Google" in html
+    assert 'type="password"' not in html
+    assert "password" not in html.lower()
+
+
+def test_continue_with_google_points_to_oauth_start(auth_client):
+    response = auth_client.get("/auth/login")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/auth/google/start"' in html
+
+
+def test_continue_with_google_preserves_safe_next_url(auth_client):
+    response = auth_client.get("/auth/login?next=/reports")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'href="/auth/google/start?next=/reports"' in html
+
+
+def test_google_start_stores_next_before_oauth_redirect(monkeypatch, auth_client):
+    from app.auth import routes
+
+    class FakeGoogle:
+        def authorize_redirect(self, redirect_uri):
+            from flask import redirect
+
+            return redirect(redirect_uri)
+
+    monkeypatch.setattr(routes.oauth, "google", FakeGoogle(), raising=False)
+
+    response = auth_client.get("/auth/google/start?next=/reports")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/auth/callback")
+    with auth_client.session_transaction() as session:
+        assert session["auth_next"] == "/reports"
+
+
+def test_authenticated_login_redirects_to_index(auth_client):
+    with auth_client.session_transaction() as session:
+        session["user"] = {"email": "owner@example.com", "name": "Owner", "picture": ""}
+
+    response = auth_client.get("/auth/login")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/"
 
 
 def test_unauthenticated_convert_returns_401_json(auth_client):

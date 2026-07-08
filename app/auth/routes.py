@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, redirect, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from . import oauth
-from .guards import auth_enabled, current_user
+from .guards import auth_enabled, current_user, is_authenticated
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -55,6 +55,22 @@ def _validate_userinfo(userinfo: dict) -> tuple[dict | None, str | None]:
 @bp.get("/login")
 def login():
     if not auth_enabled():
+        return redirect("/")
+
+    if is_authenticated():
+        return redirect("/")
+
+    next_url = _safe_next_url()
+    google_start_url = url_for("auth.google_start", next=next_url) if next_url != "/" else url_for("auth.google_start")
+    return render_template("login.html", google_start_url=google_start_url)
+
+
+@bp.get("/google/start")
+def google_start():
+    if not auth_enabled():
+        return redirect("/")
+
+    if is_authenticated():
         return redirect("/")
 
     session["auth_next"] = _safe_next_url()
