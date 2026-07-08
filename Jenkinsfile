@@ -42,8 +42,8 @@ pipeline {
         APP_PORT = '8010'
         HEALTH_PATH = '/api/v1/health'
         PUBLIC_URL = 'https://markforge.alexandru-raul.ro'
-        // Jenkins Managed File ID for the production .env file. Replace this placeholder in Jenkins.
-        ENV_FILE_ID = 'MARKFORGE_ENV_FILE_ID'
+        // Jenkins Secret File credential ID for the production .env file. Replace this placeholder in Jenkins.
+        ENV_SECRET_FILE_CREDENTIAL_ID = 'MARKFORGE_ENV_SECRET_FILE_ID'
 
         // Jenkins Secret Text credential ID for the Slack webhook. Replace this placeholder in Jenkins.
         SLACK_CREDENTIAL_ID = 'MARKFORGE_SLACK_WEBHOOK_ID'
@@ -303,8 +303,6 @@ if [ ! -f docker-compose.yml ]; then
     exit 22
 fi
 
-docker compose config --quiet
-
 GIT_COMMIT_FULL="$(git rev-parse HEAD)"
 GIT_COMMIT="$(git rev-parse --short=12 HEAD)"
 {
@@ -327,22 +325,22 @@ EOF_PREP
         stage('Inject Environment File') {
             when { expression { params.ACTION == 'deploy' } }
             steps {
-                echo 'Syncing managed .env file and injecting deployment metadata...'
-                configFileProvider([configFile(fileId: env.ENV_FILE_ID, variable: 'MANAGED_ENV_FILE')]) {
+                echo 'Syncing secret .env file and injecting deployment metadata...'
+                withCredentials([file(credentialsId: env.ENV_SECRET_FILE_CREDENTIAL_ID, variable: 'MARKFORGE_ENV_FILE')]) {
                     sh '''#!/usr/bin/env bash
 set -euo pipefail
 
-LOCAL_SHA="$(sha256sum "${MANAGED_ENV_FILE}" | awk '{print $1}')"
-REMOTE_SHA="$(ssh -T -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${SSH_ALIAS}" "test -f '${DEPLOY_DIR}/.env.managed.sha256' && cat '${DEPLOY_DIR}/.env.managed.sha256' || true")"
+LOCAL_SHA="$(sha256sum "${MARKFORGE_ENV_FILE}" | awk '{print $1}')"
+REMOTE_SHA="$(ssh -T -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${SSH_ALIAS}" "test -f '${DEPLOY_DIR}/.env.secret.sha256' && cat '${DEPLOY_DIR}/.env.secret.sha256' || true")"
 
 if [ "${LOCAL_SHA}" != "${REMOTE_SHA}" ]; then
-    echo "Managed .env changed; uploading to remote deploy directory"
+    echo "Secret .env changed; uploading to remote deploy directory"
     TMP_REMOTE="/tmp/markforge-env-${DEPLOYMENT_ID}-${DEPLOY_SLOT_LABEL}"
     set +x
-    scp -q -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${MANAGED_ENV_FILE}" "${SSH_ALIAS}:${TMP_REMOTE}"
-    ssh -T -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${SSH_ALIAS}" "install -m 600 '${TMP_REMOTE}' '${DEPLOY_DIR}/.env' && printf '%s\n' '${LOCAL_SHA}' > '${DEPLOY_DIR}/.env.managed.sha256' && chmod 600 '${DEPLOY_DIR}/.env.managed.sha256' && rm -f '${TMP_REMOTE}'"
+    scp -q -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${MARKFORGE_ENV_FILE}" "${SSH_ALIAS}:${TMP_REMOTE}"
+    ssh -T -o BatchMode=yes -o ConnectTimeout="${SSH_TIMEOUT}" "${SSH_ALIAS}" "install -m 600 '${TMP_REMOTE}' '${DEPLOY_DIR}/.env' && printf '%s\n' '${LOCAL_SHA}' > '${DEPLOY_DIR}/.env.secret.sha256' && chmod 600 '${DEPLOY_DIR}/.env.secret.sha256' && rm -f '${TMP_REMOTE}'"
 else
-    echo "Managed .env is unchanged"
+    echo "Secret .env is unchanged"
 fi
 
 ssh -T \
@@ -370,7 +368,7 @@ COMPOSE_PROJECT_NAME="$6"
 cd "${DEPLOY_DIR}"
 
 if [ ! -f .env ]; then
-    echo ".env file is missing after managed file sync"
+    echo ".env file is missing after secret file sync"
     exit 30
 fi
 
@@ -456,6 +454,10 @@ STRATEGY="$8"
 export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
 
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 
 BUILD_ARGS=()
@@ -502,6 +504,10 @@ COMPOSE_PROJECT_NAME="$2"
 APP_SERVICE_NAME="$3"
 export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 docker compose up -d --force-recreate "${APP_SERVICE_NAME}"
 docker compose ps
@@ -522,6 +528,10 @@ DEPLOY_DIR="$1"
 COMPOSE_PROJECT_NAME="$2"
 export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 docker compose stop
 docker compose ps
@@ -543,6 +553,10 @@ COMPOSE_PROJECT_NAME="$2"
 REMOVE_VOLUMES="$3"
 export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 DOWN_ARGS=(--remove-orphans)
 if [ "${REMOVE_VOLUMES}" = "true" ]; then
@@ -568,6 +582,10 @@ COMPOSE_PROJECT_NAME="$2"
 APP_SERVICE_NAME="$3"
 export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 docker compose logs --tail=250 "${APP_SERVICE_NAME}"
 EOF_LOGS
@@ -592,6 +610,10 @@ export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
 
 echo "=== Compose Status ==="
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 docker compose ps
 echo ""
@@ -649,6 +671,10 @@ export COMPOSE_PROJECT_NAME
 cd "${DEPLOY_DIR}"
 
 echo "=== Health Check - MarkForge | Slot: ${SLOT_LABEL} ==="
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 
 APP_CONTAINER="$(docker compose ps "${APP_SERVICE_NAME}" --format "{{.Name}}" | head -1 || true)"
@@ -767,6 +793,10 @@ cat .deployment-version || true
 echo ""
 
 echo "=== Container Status ==="
+if [ ! -f .env ]; then
+    echo ".env is missing on deploy host. Run ACTION=deploy first or provide the secret .env."
+    exit 30
+fi
 docker compose config --quiet
 docker compose ps --format "table {{.Name}}\\t{{.Status}}\\t{{.Ports}}"
 echo ""

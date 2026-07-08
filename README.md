@@ -146,6 +146,8 @@ CORS_ORIGINS=https://markforge.alexandru-raul.ro
 
 Keep `.env` local and never commit real Google OAuth credentials, LLM API keys, or `SECRET_KEY`.
 
+Jenkins deployments should use a Jenkins **Secret File** credential containing the production `.env` file. Set `ENV_SECRET_FILE_CREDENTIAL_ID` in the `Jenkinsfile` to that credential ID, and do not use Jenkins Config File Provider or Managed File entries for secret-bearing `.env` content.
+
 In Google Cloud Console, add this authorized redirect URI:
 
 ```text
