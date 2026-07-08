@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import config_by_name
 from .extensions import cors, limiter
@@ -45,6 +46,7 @@ def create_app(env: str | None = None) -> Flask:
     config_class = config_by_name.get(env, config_by_name["development"])
     app.config.from_object(config_class)
     _validate_auth_config(app)
+    _configure_proxy(app)
 
     # ── Ensure temp upload dir exists ───────────────────────────────────────
     Path(app.config["UPLOAD_TEMP_DIR"]).mkdir(parents=True, exist_ok=True)
@@ -75,6 +77,20 @@ def create_app(env: str | None = None) -> Flask:
     )
 
     return app
+
+
+def _configure_proxy(app: Flask) -> None:
+    """Trust one controlled reverse proxy hop when explicitly enabled."""
+    if not app.config.get("TRUST_PROXY"):
+        return
+
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1,
+        x_port=1,
+    )
 
 
 def _configure_logging(app: Flask) -> None:
