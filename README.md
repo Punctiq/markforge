@@ -193,23 +193,88 @@ Current and planned provider model:
 
 ---
 
-## Optional personal Google login
+## 🔐 Google Login Setup
 
-MarkForge can be locked down for personal use with Google OAuth / OpenID Connect. It is disabled by default and does not add password login, registration, roles, billing, or a user database.
+MarkForge can be protected with Google login for personal or private use. When authentication is enabled, opening the app redirects to the login page, and only allowlisted Google accounts can access MarkForge.
 
-Set these environment variables:
+No database, password registration, or user management system is required.
+
+### Enable Google login in MarkForge
+
+Add these values to your local `.env` file:
 
 ```env
 AUTH_ENABLED=true
-AUTH_ALLOWED_EMAILS=you@example.com
+SECRET_KEY=replace-with-a-long-random-secret
 GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5000/auth/callback
-SECRET_KEY=use-a-long-random-secret-at-least-32-characters
+AUTH_ALLOWED_EMAILS=your-email@gmail.com
 SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=Lax
 ```
 
-Use `SESSION_COOKIE_SECURE=true` behind HTTPS in production. When auth is enabled, `/`, `/api/v1/convert`, and `/api/v1/ai/status` require a logged-in allowlisted Google account. `/api/v1/health` remains public for liveness checks.
+Generate a strong `SECRET_KEY` with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+### Create Google OAuth credentials
+
+1. Go to the Google Cloud Console.
+2. Create a project or select an existing project.
+3. Open **APIs & Services**.
+4. Open **OAuth consent screen**.
+5. Configure the app name, support email, and developer contact email.
+6. For personal use, testing mode is enough.
+7. Add your Google account as a test user if Google asks for test users.
+8. Open **Credentials**.
+9. Create an **OAuth Client ID**.
+10. Choose **Web application**.
+11. Add this authorized redirect URI:
+
+```text
+http://localhost:5000/auth/callback
+```
+
+12. Copy the Client ID and Client Secret into your `.env` file.
+
+### Test locally
+
+Start MarkForge:
+
+```bash
+make run
+```
+
+Then open:
+
+```text
+http://localhost:5000
+```
+
+You should see the MarkForge login page. Click **Continue with Google**, sign in with the allowlisted Google account, and after a successful login you should be redirected into MarkForge.
+
+### Production notes
+
+- Use HTTPS.
+- Set `SESSION_COOKIE_SECURE=true`.
+- Use your production redirect URI, for example:
+
+```text
+https://your-domain.example/auth/callback
+```
+
+- Add the same production URI in Google Cloud Console.
+- Keep `GOOGLE_OAUTH_CLIENT_SECRET` and `SECRET_KEY` out of Git.
+
+### Troubleshooting
+
+- `redirect_uri_mismatch`: the URI in `.env` must exactly match the Google Cloud authorized redirect URI.
+- `Access denied`: your email must be listed in `AUTH_ALLOWED_EMAILS`.
+- Login loop or cookies not saved: check `SECRET_KEY`, HTTPS, `SESSION_COOKIE_SECURE`, and proxy settings.
+- Auth disabled: make sure `AUTH_ENABLED=true`.
 
 ## 🧪 Development
 
