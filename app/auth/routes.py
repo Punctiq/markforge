@@ -34,6 +34,12 @@ def _fetch_google_userinfo() -> dict:
     return dict(oauth.google.userinfo(token=token))
 
 
+def _render_auth_denied(status_code: int = 403):
+    session.pop("user", None)
+    session.pop("auth_next", None)
+    return render_template("auth_denied.html"), status_code
+
+
 def _validate_userinfo(userinfo: dict) -> tuple[dict | None, str | None]:
     email = _normalize_email(userinfo.get("email"))
     if not email:
@@ -89,7 +95,7 @@ def callback():
         userinfo = _fetch_google_userinfo()
     except Exception as exc:
         current_app.logger.warning("Google OAuth callback failed: %s", exc.__class__.__name__)
-        return jsonify({"error": "Google login failed."}), 401
+        return _render_auth_denied(401)
 
     user, error = _validate_userinfo(userinfo)
     if error:
@@ -97,8 +103,7 @@ def callback():
             "Rejected Google login for email: %s",
             _normalize_email(userinfo.get("email")) or "missing",
         )
-        session.pop("user", None)
-        return jsonify({"error": error}), 403
+        return _render_auth_denied(403)
 
     next_url = session.pop("auth_next", None)
     session.clear()

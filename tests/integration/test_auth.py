@@ -178,7 +178,7 @@ def test_allowed_email_session_works(monkeypatch, auth_client):
         }
 
 
-def test_disallowed_email_is_rejected(monkeypatch, auth_client):
+def test_disallowed_email_renders_access_denied_page(monkeypatch, auth_client):
     from app.auth import routes
 
     monkeypatch.setattr(
@@ -188,15 +188,18 @@ def test_disallowed_email_is_rejected(monkeypatch, auth_client):
     )
 
     response = auth_client.get("/auth/callback")
+    html = response.get_data(as_text=True)
 
     assert response.status_code == 403
-    assert "not allowed" in response.get_json()["error"]
+    assert response.content_type.startswith("text/html")
+    assert "Access denied" in html
+    assert "Back to sign in" in html
+    assert "intruder@example.com" not in html
     with auth_client.session_transaction() as session:
         assert "user" not in session
 
 
-
-def test_missing_email_is_rejected(monkeypatch, auth_client):
+def test_missing_email_renders_access_denied_page(monkeypatch, auth_client):
     from app.auth import routes
 
     monkeypatch.setattr(
@@ -206,14 +209,16 @@ def test_missing_email_is_rejected(monkeypatch, auth_client):
     )
 
     response = auth_client.get("/auth/callback")
+    html = response.get_data(as_text=True)
 
     assert response.status_code == 403
-    assert "email address" in response.get_json()["error"]
+    assert "Access denied" in html
+    assert "email address" not in html
     with auth_client.session_transaction() as session:
         assert "user" not in session
 
 
-def test_unverified_email_is_rejected(monkeypatch, auth_client):
+def test_unverified_email_renders_access_denied_page(monkeypatch, auth_client):
     from app.auth import routes
 
     monkeypatch.setattr(
@@ -223,9 +228,32 @@ def test_unverified_email_is_rejected(monkeypatch, auth_client):
     )
 
     response = auth_client.get("/auth/callback")
+    html = response.get_data(as_text=True)
 
     assert response.status_code == 403
-    assert "not verified" in response.get_json()["error"]
+    assert "Access denied" in html
+    assert "not verified" not in html
+    with auth_client.session_transaction() as session:
+        assert "user" not in session
+
+
+def test_oauth_provider_exception_renders_safe_access_denied_page(monkeypatch, auth_client):
+    from app.auth import routes
+
+    def raise_provider_error():
+        raise RuntimeError("raw provider failure with client_secret=oauth-secret")
+
+    monkeypatch.setattr(routes, "_fetch_google_userinfo", raise_provider_error)
+
+    response = auth_client.get("/auth/callback")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 401
+    assert "Access denied" in html
+    assert "Back to sign in" in html
+    assert "client_secret" not in html
+    assert "oauth-secret" not in html
+    assert "raw provider failure" not in html
     with auth_client.session_transaction() as session:
         assert "user" not in session
 
