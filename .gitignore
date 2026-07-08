@@ -45,3 +45,5 @@ htmlcov/
 
 # Node tooling if used for UI checks
 node_modules/
+
+local_samples/

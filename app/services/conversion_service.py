@@ -31,6 +31,7 @@ from ..builders.zip_builder import build_zip
 from ..quality import build_quality_report
 from ..converters.base import ConversionError
 from ..converters.registry import get_converter
+from .markdown_cleanup import cleanup_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,13 @@ class ConversionService:
         except Exception as exc:
             raise ConversionError(f"Unexpected error: {exc}") from exc
 
-        markdown = raw.markdown
-        original_markdown = markdown
+        original_markdown = raw.markdown
+        deterministic_cleanup = cleanup_markdown(original_markdown)
+        markdown = deterministic_cleanup.markdown
         figures_bytes = raw.figures   # {filename: bytes}
 
         # ── 2. AI cleanup (optional) ─────────────────────────────────────────
-        fixes: list[str] = []
+        fixes: list[str] = list(deterministic_cleanup.fixes)
         ai_applied = False
         token_usage: dict[str, int] = {
             "prompt_tokens": 0,
@@ -91,7 +93,7 @@ class ConversionService:
             from ..agent.cleaner import MarkdownCleaner
             cleaned = MarkdownCleaner(config=self.config, mode=ai_cleanup_mode).clean(markdown)
             markdown = cleaned.markdown
-            fixes = cleaned.fixes
+            fixes.extend(cleaned.fixes)
             ai_applied = cleaned.ai_applied
             token_usage = cleaned.token_usage or token_usage
 
