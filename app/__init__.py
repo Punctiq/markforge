@@ -44,6 +44,7 @@ def create_app(env: str | None = None) -> Flask:
     # ── Configuration ───────────────────────────────────────────────────────
     config_class = config_by_name.get(env, config_by_name["development"])
     app.config.from_object(config_class)
+    _validate_auth_config(app)
 
     # ── Ensure temp upload dir exists ───────────────────────────────────────
     Path(app.config["UPLOAD_TEMP_DIR"]).mkdir(parents=True, exist_ok=True)
@@ -52,10 +53,16 @@ def create_app(env: str | None = None) -> Flask:
     cors.init_app(app, origins=app.config["CORS_ORIGINS"])
     limiter.init_app(app)
 
+    from .auth import init_oauth
+
+    init_oauth(app)
+
     # ── Blueprints ──────────────────────────────────────────────────────────
     from .api.v1 import bp as api_v1_bp
+    from .auth.routes import bp as auth_bp
     from .main import bp as main_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(api_v1_bp, url_prefix="/api/v1")
 
@@ -81,3 +88,16 @@ def _configure_logging(app: Flask) -> None:
     # Quieten noisy libraries in production
     if not app.config.get("DEBUG"):
         logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
+
+def _validate_auth_config(app: Flask) -> None:
+    """Fail fast if auth would run with an unsafe session secret."""
+    if not app.config.get("AUTH_ENABLED"):
+        return
+
+    secret_key = str(app.config.get("SECRET_KEY", "") or "")
+    unsafe_keys = {"", "dev-secret-change-in-prod"}
+    if secret_key in unsafe_keys or len(secret_key) < 32:
+        raise RuntimeError(
+            "AUTH_ENABLED=true requires a strong SECRET_KEY of at least 32 characters."
+        )

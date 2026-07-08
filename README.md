@@ -193,6 +193,24 @@ Current and planned provider model:
 
 ---
 
+## Optional personal Google login
+
+MarkForge can be locked down for personal use with Google OAuth / OpenID Connect. It is disabled by default and does not add password login, registration, roles, billing, or a user database.
+
+Set these environment variables:
+
+```env
+AUTH_ENABLED=true
+AUTH_ALLOWED_EMAILS=you@example.com
+GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
+GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5000/auth/callback
+SECRET_KEY=use-a-long-random-secret-at-least-32-characters
+SESSION_COOKIE_SECURE=false
+```
+
+Use `SESSION_COOKIE_SECURE=true` behind HTTPS in production. When auth is enabled, `/`, `/api/v1/convert`, and `/api/v1/ai/status` require a logged-in allowlisted Google account. `/api/v1/health` remains public for liveness checks.
+
 ## 🧪 Development
 
 ```bash
