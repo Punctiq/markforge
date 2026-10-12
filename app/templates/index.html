@@ -45,6 +45,10 @@
     .forge-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid var(--hair); border-radius: 999px; background: var(--paper-2); color: var(--ink-soft); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
     .forge-pill strong { color: var(--ink); font-weight: 800; }
     .forge-pill .spark { color: var(--code-accent); filter: drop-shadow(0 2px 4px rgba(242,178,100,.35)); }
+    .user-pill { display: inline-flex; align-items: center; gap: 8px; max-width: 280px; padding: 7px 10px; border: 1px solid var(--hair); border-radius: 999px; background: #fff; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+    .user-pill span { overflow: hidden; text-overflow: ellipsis; }
+    .logout-link { color: var(--teal-dim); text-decoration: none; font-size: 12.5px; font-weight: 800; }
+    .logout-link:hover { text-decoration: underline; }
     .btn { font-family: inherit; font-size: 14px; font-weight: 600; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
     .btn-ghost { background: none; color: var(--ink-soft); }
@@ -286,6 +290,10 @@
       <a href="#" data-nav-view="api" id="navApi">API</a>
     </nav>
     <div class="topbar-right" aria-label="MarkForge status">
+      {% if user %}
+        <span class="user-pill" title="{{ user.email }}"><span>{{ user.name or user.email }}</span></span>
+        <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
+      {% endif %}
       <span class="forge-pill"><strong>Self-hosted</strong></span>
       <span class="forge-pill"><span class="spark">⛏️</span> Forge ready</span>
     </div>

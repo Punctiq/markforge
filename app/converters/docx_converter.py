@@ -107,7 +107,7 @@ def _para_to_md(para, warnings: list[str], image_ctx: _ImageContext) -> str | No
     style_name = (para.style.name or "").strip()
     style_lower = style_name.lower()
 
-    text = _runs_to_md(para.runs, warnings, image_ctx).strip()
+    text = _paragraph_inline_to_md(para, warnings, image_ctx).strip()
 
     # Skip Word-generated table of contents lines. They are repeated metadata,
     # not real document body content. The real headings remain in the body.
@@ -149,26 +149,85 @@ def _list_prefix(para) -> str:
 
 # ── Runs → inline Markdown + inline images ───────────────────────────────────
 
-def _runs_to_md(runs, warnings: list[str], image_ctx: _ImageContext) -> str:
+def _paragraph_inline_to_md(para, warnings: list[str], image_ctx: _ImageContext) -> str:
     parts: list[str] = []
 
-    for run in runs:
-        # Images are represented as a:blip elements inside the run XML.
-        image_refs = _image_refs_from_run(run, image_ctx)
-        if image_refs:
-            # Keep image markers in document order. Put them on their own line
-            # when mixed with text to avoid broken Markdown.
-            if parts and not parts[-1].endswith("\n"):
-                parts.append("\n")
-            parts.extend(image_refs)
-            parts.append("\n")
-
-        chunk = run.text or ""
-        if chunk:
-            chunk = _format_run_text(chunk, run)
-            parts.append(chunk)
+    for child in para._p:
+        tag = _local_name(child.tag)
+        if tag == "r":
+            parts.append(_run_element_to_md(child, para, warnings, image_ctx))
+        elif tag == "hyperlink":
+            parts.append(_hyperlink_to_md(child, para, warnings, image_ctx))
 
     return "".join(parts).strip()
+
+
+def _run_element_to_md(run_element, para, warnings: list[str], image_ctx: _ImageContext) -> str:
+    from docx.text.run import Run
+
+    run = Run(run_element, para)
+    parts: list[str] = []
+
+    # Images are represented as a:blip elements inside the run XML.
+    image_refs = _image_refs_from_run(run, image_ctx)
+    if image_refs:
+        # Keep image markers in document order. Put them on their own line
+        # when mixed with text to avoid broken Markdown.
+        parts.append("\n")
+        parts.extend(image_refs)
+        parts.append("\n")
+
+    chunk = run.text or ""
+    if chunk:
+        parts.append(_format_run_text(chunk, run))
+
+    return "".join(parts)
+
+
+def _hyperlink_to_md(hyperlink_element, para, warnings: list[str], image_ctx: _ImageContext) -> str:
+    text_parts: list[str] = []
+    for child in hyperlink_element:
+        if _local_name(child.tag) == "r":
+            text_parts.append(_run_element_to_md(child, para, warnings, image_ctx))
+
+    text = "".join(text_parts).strip()
+    target = _hyperlink_target(hyperlink_element, para)
+
+    if not target:
+        return text
+
+    display = text or target
+    return f"[{_escape_markdown_link_text(display)}]({_escape_markdown_link_target(target)})"
+
+
+def _hyperlink_target(hyperlink_element, para) -> str | None:
+    rid = hyperlink_element.get(f"{{{_R_NS}}}id")
+    if rid:
+        try:
+            rel = para.part.rels[rid]
+        except KeyError:
+            return None
+        return str(getattr(rel, "target_ref", "") or "").strip() or None
+
+    anchor = str(hyperlink_element.get(f"{{{_W_NS}}}anchor") or "").strip()
+    if anchor:
+        return f"#{anchor}"
+    return None
+
+
+def _escape_markdown_link_text(text: str) -> str:
+    return text.replace("\\", r"\\").replace("[", r"\[").replace("]", r"\]")
+
+
+def _escape_markdown_link_target(target: str) -> str:
+    return (
+        target.replace("\\", "%5C")
+        .replace(" ", "%20")
+        .replace("(", "%28")
+        .replace(")", "%29")
+        .replace("<", "%3C")
+        .replace(">", "%3E")
+    )
 
 
 def _image_refs_from_run(run, image_ctx: _ImageContext) -> list[str]:
@@ -241,7 +300,7 @@ def _cell_text(cell, warnings: list[str], image_ctx: _ImageContext) -> str:
     parts: list[str] = []
 
     for p in cell.paragraphs:
-        text = _runs_to_md(p.runs, warnings, image_ctx).strip()
+        text = _paragraph_inline_to_md(p, warnings, image_ctx).strip()
         if text:
             parts.append(text)
 

@@ -102,17 +102,71 @@ http://localhost:5000
 
 ## 🐳 Docker
 
-```bash
-docker compose up -d --build
-```
-
-Then open:
+MarkForge's Docker setup is intended for production behind HAProxy and Cloudflare:
 
 ```text
-http://localhost:5000
+Cloudflare -> HAProxy bare metal -> 127.0.0.1:8010 -> Docker -> Gunicorn -> Flask
 ```
 
-> 📝 Docker support may depend on your local `Dockerfile` / `docker-compose.yml` setup.
+Build and run:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Logs and health:
+
+```bash
+docker compose logs -f markforge
+curl http://127.0.0.1:8010/api/v1/health
+```
+
+The compose file binds MarkForge only on the host loopback interface:
+
+```text
+127.0.0.1:8010:5000
+```
+
+HAProxy should expose the public HTTPS domain and route to `127.0.0.1:8010`.
+
+Production `.env` checklist:
+
+```env
+FLASK_ENV=production
+AUTH_ENABLED=true
+SESSION_COOKIE_SECURE=true
+TRUST_PROXY=true
+GOOGLE_OAUTH_REDIRECT_URI=https://markforge.alexandru-raul.ro/auth/callback
+AUTH_ALLOWED_EMAILS=your-email@example.com
+SECRET_KEY=<strong random value>
+UPLOAD_TEMP_DIR=/tmp/markforge
+CORS_ORIGINS=https://markforge.alexandru-raul.ro
+```
+
+Keep `.env` local and never commit real Google OAuth credentials, LLM API keys, or `SECRET_KEY`.
+
+Jenkins deployments should use a Jenkins **Secret File** credential containing the production `.env` file. Set `ENV_SECRET_FILE_CREDENTIAL_ID` in the `Jenkinsfile` to that credential ID, and do not use Jenkins Config File Provider or Managed File entries for secret-bearing `.env` content.
+
+In Google Cloud Console, add this authorized redirect URI:
+
+```text
+https://markforge.alexandru-raul.ro/auth/callback
+```
+
+Concise HAProxy backend example:
+
+```haproxy
+backend markforge_backend
+    mode http
+    option forwardfor
+    http-request set-header X-Forwarded-Proto https
+    http-request set-header X-Forwarded-Host %[req.hdr(Host)]
+    http-request set-header X-Forwarded-Port 443
+    option httpchk GET /api/v1/health
+    http-check expect status 200
+    server markforge 127.0.0.1:8010 check
+```
 
 ---
 
@@ -192,6 +246,89 @@ Current and planned provider model:
 - ⚠️ GitHub Copilot is not treated as a standard direct LLM API provider
 
 ---
+
+## 🔐 Google Login Setup
+
+MarkForge can be protected with Google login for personal or private use. When authentication is enabled, opening the app redirects to the login page, and only allowlisted Google accounts can access MarkForge.
+
+No database, password registration, or user management system is required.
+
+### Enable Google login in MarkForge
+
+Add these values to your local `.env` file:
+
+```env
+AUTH_ENABLED=true
+SECRET_KEY=replace-with-a-long-random-secret
+GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
+GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5000/auth/callback
+AUTH_ALLOWED_EMAILS=your-email@gmail.com
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=Lax
+```
+
+Generate a strong `SECRET_KEY` with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+### Create Google OAuth credentials
+
+1. Go to the Google Cloud Console.
+2. Create a project or select an existing project.
+3. Open **APIs & Services**.
+4. Open **OAuth consent screen**.
+5. Configure the app name, support email, and developer contact email.
+6. For personal use, testing mode is enough.
+7. Add your Google account as a test user if Google asks for test users.
+8. Open **Credentials**.
+9. Create an **OAuth Client ID**.
+10. Choose **Web application**.
+11. Add this authorized redirect URI:
+
+```text
+http://localhost:5000/auth/callback
+```
+
+12. Copy the Client ID and Client Secret into your `.env` file.
+
+### Test locally
+
+Start MarkForge:
+
+```bash
+make run
+```
+
+Then open:
+
+```text
+http://localhost:5000
+```
+
+You should see the MarkForge login page. Click **Continue with Google**, sign in with the allowlisted Google account, and after a successful login you should be redirected into MarkForge.
+
+### Production notes
+
+- Use HTTPS.
+- Set `SESSION_COOKIE_SECURE=true`.
+- Use your production redirect URI, for example:
+
+```text
+https://your-domain.example/auth/callback
+```
+
+- Add the same production URI in Google Cloud Console.
+- Keep `GOOGLE_OAUTH_CLIENT_SECRET` and `SECRET_KEY` out of Git.
+
+### Troubleshooting
+
+- `redirect_uri_mismatch`: the URI in `.env` must exactly match the Google Cloud authorized redirect URI.
+- `Access denied`: your email must be listed in `AUTH_ALLOWED_EMAILS`.
+- Login loop or cookies not saved: check `SECRET_KEY`, HTTPS, `SESSION_COOKIE_SECURE`, and proxy settings.
+- Auth disabled: make sure `AUTH_ENABLED=true`.
 
 ## 🧪 Development
 

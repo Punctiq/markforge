@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _HEADING_RE = re.compile(r"(?m)^(#{1,6})\s+(.+?)\s*$")
 _IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
-_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\([^)]+\)")
+_LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 _JSON_FENCE_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 _TABLE_LINE_RE = re.compile(r"^\s*\|.+\|\s*$", re.MULTILINE)
 
@@ -98,6 +98,7 @@ def _metrics(markdown: str) -> dict[str, Any]:
     headings = _extract_headings(markdown)
     images = _IMAGE_RE.findall(markdown or "")
     table_lines = _TABLE_LINE_RE.findall(markdown or "")
+    link_targets = _LINK_RE.findall(markdown or "")
     code_fence_count = (markdown or "").count("```")
     return {
         "char_count": len(markdown or ""),
@@ -107,10 +108,22 @@ def _metrics(markdown: str) -> dict[str, Any]:
         "image_count": len(images),
         "images": images,
         "table_line_count": len(table_lines),
-        "link_count": len(_LINK_RE.findall(markdown or "")),
+        "link_count": len(link_targets),
+        "link_targets": link_targets,
+        "link_target_count": len(link_targets),
         "code_fence_count": code_fence_count,
         "code_fences_balanced": code_fence_count % 2 == 0,
     }
+
+
+def _hyperlink_target_retention_ratio(before: dict[str, Any], after: dict[str, Any]) -> float:
+    before_link_targets = before.get("link_targets", []) or []
+    if not before_link_targets:
+        return 1.0
+
+    after_target_set = set(after.get("link_targets", []) or [])
+    retained_targets = sum(1 for target in before_link_targets if target in after_target_set)
+    return retained_targets / len(before_link_targets)
 
 
 def _deterministic_findings(before: dict[str, Any], after: dict[str, Any]) -> tuple[list[dict[str, str]], str, str, dict[str, str]]:
@@ -149,6 +162,21 @@ def _deterministic_findings(before: dict[str, Any], after: dict[str, Any]) -> tu
             "topic": "Figures / images",
             "description": "Image references changed, disappeared, or were reordered.",
         })
+
+    before_link_targets = before.get("link_targets", []) or []
+    if before_link_targets:
+        hyperlink_target_retention = _hyperlink_target_retention_ratio(before, after)
+        if hyperlink_target_retention < 0.80:
+            integrity_risk = _max_severity(integrity_risk, "medium")
+            findings.append({
+                "type": "missing_hyperlinks_or_link_targets",
+                "severity": "medium",
+                "topic": "Links",
+                "description": (
+                    "Final Markdown retained only "
+                    f"{hyperlink_target_retention:.1%} of original hyperlink targets."
+                ),
+            })
 
     before_heading_count = int(before["heading_count"])
     after_heading_count = int(after["heading_count"])
@@ -287,6 +315,8 @@ def _metric_summary(metrics: dict[str, Any]) -> dict[str, Any]:
         "image_reference_sample": images[:20],
         "table_line_count": metrics.get("table_line_count", 0),
         "link_count": metrics.get("link_count", 0),
+        "link_target_count": metrics.get("link_target_count", 0),
+        "link_target_sample": (metrics.get("link_targets", []) or [])[:20],
         "code_fence_count": metrics.get("code_fence_count", 0),
         "code_fences_balanced": metrics.get("code_fences_balanced", True),
     }
@@ -570,6 +600,7 @@ def build_quality_report(
             "heading_count_delta": int(after["heading_count"]) - int(before["heading_count"]),
             "image_count_delta": int(after["image_count"]) - int(before["image_count"]),
             "table_line_count_delta": int(after["table_line_count"]) - int(before["table_line_count"]),
+            "hyperlink_target_retention_ratio": _hyperlink_target_retention_ratio(before, after),
         },
         "findings": findings,
     }

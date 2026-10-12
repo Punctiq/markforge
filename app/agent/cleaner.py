@@ -26,6 +26,11 @@ from .prompts import CLEANUP_USER, get_cleanup_system_prompt
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_CHARS_FOR_FULL_AI_CLEANUP = 25_000
+DEFAULT_CLEANUP_CONTEXT_WINDOW_TOKENS = 32_000
+DEFAULT_LLM_MAX_OUTPUT_TOKENS = 8_192
+DEFAULT_MIN_CLEANUP_INPUT_TOKENS = 2_048
+MIN_CLEANUP_CHARS = 1_000
+MIN_OUTPUT_TOKENS = 256
 ALLOWED_CLEANUP_MODES = {"safe", "balanced", "aggressive"}
 
 MODE_CONFIG = {
@@ -83,6 +88,41 @@ def _add_token_usage(total: dict[str, int], item: dict[str, int]) -> dict[str, i
         total[key] = int(total.get(key, 0) or 0) + int(item.get(key, 0) or 0)
     return total
 
+
+def _safe_int_config(
+    config: dict,
+    key: str,
+    default: int,
+    min_value: int = 1,
+    max_value: int | None = None,
+) -> int:
+    raw = config.get(key, default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s=%r; using default %s.", key, raw, default)
+        value = default
+
+    if value < min_value:
+        logger.warning("Invalid %s=%r; using default %s.", key, raw, default)
+        value = default
+
+    if max_value is not None and value > max_value:
+        logger.warning("Invalid %s=%r; clamping to %s.", key, raw, max_value)
+        value = max_value
+
+    return value
+
+
+def _estimate_tokens(text: str) -> int:
+    # Conservative no-dependency estimate for mixed prose, code, tables and CJK.
+    # Some dense scripts and generated text can approach one token per character.
+    return max(1, len(text))
+
+
+def _estimate_cleanup_prompt_tokens(system_prompt: str, markdown: str) -> int:
+    return _estimate_tokens(system_prompt) + _estimate_tokens(CLEANUP_USER.format(markdown=markdown))
+
 @dataclass
 class CleanerResult:
     markdown: str
@@ -101,33 +141,69 @@ class _ParsedCleanup:
 
 class MarkdownCleaner:
     def __init__(self, config: dict, mode: str = "safe") -> None:
-        self.config = config
+        self.config = dict(config)
         self.mode = (mode or "safe").strip().lower()
         if self.mode not in ALLOWED_CLEANUP_MODES:
             logger.warning("Unsupported AI cleanup mode '%s'; falling back to safe.", self.mode)
             self.mode = "safe"
         self.mode_config = MODE_CONFIG[self.mode]
         self.system_prompt = get_cleanup_system_prompt(self.mode)
+        self.context_window_tokens = _safe_int_config(
+            self.config,
+            "LLM_CLEANUP_CONTEXT_WINDOW_TOKENS",
+            DEFAULT_CLEANUP_CONTEXT_WINDOW_TOKENS,
+            min_value=DEFAULT_MIN_CLEANUP_INPUT_TOKENS + MIN_OUTPUT_TOKENS,
+            max_value=2_000_000,
+        )
+        self.max_output_tokens = min(
+            _safe_int_config(
+                self.config,
+                "LLM_MAX_OUTPUT_TOKENS",
+                DEFAULT_LLM_MAX_OUTPUT_TOKENS,
+                min_value=MIN_OUTPUT_TOKENS,
+                max_value=262_144,
+            ),
+            max(MIN_OUTPUT_TOKENS, self.context_window_tokens // 2),
+        )
+        self.config["LLM_MAX_OUTPUT_TOKENS"] = self.max_output_tokens
 
     def clean(self, markdown: str) -> CleanerResult:
+        try:
+            return self._clean(markdown)
+        except Exception:
+            logger.exception("Unexpected AI cleanup failure; original Markdown preserved.")
+            return CleanerResult(
+                markdown=markdown,
+                fixes=["AI cleanup failed; original Markdown was preserved."],
+                ai_applied=False,
+                token_usage=_empty_token_usage(),
+            )
+
+    def _clean(self, markdown: str) -> CleanerResult:
         if not self.config.get("LLM_API_KEY"):
-            logger.warning("LLM_API_KEY not set — skipping AI cleanup.")
+            logger.warning("LLM_API_KEY not set; skipping AI cleanup.")
             return CleanerResult(markdown=markdown, fixes=[], ai_applied=False, token_usage=_empty_token_usage())
 
         try:
             client = get_llm_client(self.config)
         except LLMError as exc:
-            logger.warning("LLM client init failed: %s — skipping cleanup.", exc)
-            return CleanerResult(markdown=markdown, fixes=[], ai_applied=False, token_usage=_empty_token_usage())
-
-        max_full_chars = int(
-            self.config.get(
-                "LLM_MAX_MARKDOWN_CHARS_FOR_FULL_CLEANUP",
-                DEFAULT_MAX_CHARS_FOR_FULL_AI_CLEANUP,
+            logger.warning("LLM client init failed; skipping cleanup: %s", exc)
+            return CleanerResult(
+                markdown=markdown,
+                fixes=["AI cleanup failed; original Markdown was preserved."],
+                ai_applied=False,
+                token_usage=_empty_token_usage(),
             )
+
+        max_full_chars = _safe_int_config(
+            self.config,
+            "LLM_MAX_MARKDOWN_CHARS_FOR_FULL_CLEANUP",
+            DEFAULT_MAX_CHARS_FOR_FULL_AI_CLEANUP,
+            min_value=MIN_CLEANUP_CHARS,
+            max_value=2_000_000,
         )
 
-        if len(markdown) <= max_full_chars:
+        if len(markdown) <= max_full_chars and self._fits_cleanup_budget(markdown):
             return self._clean_full_document(client=client, markdown=markdown)
 
         return self._clean_large_document(client=client, markdown=markdown)
@@ -137,12 +213,29 @@ class MarkdownCleaner:
         return float(self.mode_config[key])
 
     def _max_chunk_chars(self) -> int:
-        return int(
-            self.config.get(
-                "LLM_MAX_MARKDOWN_CHARS_PER_CHUNK",
-                self.mode_config["max_chunk_chars"],
-            )
+        configured = _safe_int_config(
+            self.config,
+            "LLM_MAX_MARKDOWN_CHARS_PER_CHUNK",
+            self.mode_config["max_chunk_chars"],
+            min_value=MIN_CLEANUP_CHARS,
+            max_value=2_000_000,
         )
+        return min(configured, self._estimated_safe_chunk_chars())
+
+    def _input_token_budget(self) -> int:
+        return max(1, self.context_window_tokens - self.max_output_tokens)
+
+    def _fits_cleanup_budget(self, markdown: str) -> bool:
+        estimate = _estimate_cleanup_prompt_tokens(self.system_prompt, markdown)
+        return estimate <= self._input_token_budget()
+
+    def _estimated_safe_chunk_chars(self) -> int:
+        system_tokens = _estimate_tokens(self.system_prompt)
+        template_tokens = _estimate_tokens(CLEANUP_USER.format(markdown=""))
+        markdown_budget = self._input_token_budget() - system_tokens - template_tokens
+        if markdown_budget < DEFAULT_MIN_CLEANUP_INPUT_TOKENS:
+            return MIN_CLEANUP_CHARS
+        return max(MIN_CLEANUP_CHARS, markdown_budget)
 
     def _clean_full_document(self, client: Any, markdown: str) -> CleanerResult:
         prompt = CLEANUP_USER.format(markdown=markdown)
@@ -152,10 +245,18 @@ class MarkdownCleaner:
             raw = client.complete(system=self.system_prompt, user=prompt)
             token_usage = _get_last_token_usage(client)
         except LLMError as exc:
-            logger.error("LLM call failed: %s", exc)
+            logger.error("LLM full-document cleanup failed; original Markdown preserved: %s", exc)
             return CleanerResult(
                 markdown=markdown,
-                fixes=[],
+                fixes=["AI cleanup failed; original Markdown was preserved."],
+                ai_applied=False,
+                token_usage=token_usage,
+            )
+        except Exception:
+            logger.exception("Unexpected full-document AI cleanup failure; original Markdown preserved.")
+            return CleanerResult(
+                markdown=markdown,
+                fixes=["AI cleanup failed; original Markdown was preserved."],
                 ai_applied=False,
                 token_usage=token_usage,
             )
@@ -200,14 +301,30 @@ class MarkdownCleaner:
         applied_chunks = 0
 
         for idx, chunk in enumerate(chunks, start=1):
+            if not self._fits_cleanup_budget(chunk):
+                logger.warning(
+                    "AI cleanup chunk %d/%d skipped because estimated prompt tokens exceed budget.",
+                    idx,
+                    len(chunks),
+                )
+                cleaned_chunks.append(chunk)
+                fixes.append("AI cleanup skipped because the input was too large for the configured model budget.")
+                continue
+
             prompt = CLEANUP_USER.format(markdown=chunk)
 
             try:
                 raw = client.complete(system=self.system_prompt, user=prompt)
                 _add_token_usage(token_usage_total, _get_last_token_usage(client))
             except LLMError as exc:
-                msg = f"AI cleanup chunk {idx}/{len(chunks)} failed: {exc}; original chunk kept."
-                logger.error(msg)
+                msg = "AI cleanup failed for one chunk; original Markdown was preserved."
+                logger.error("AI cleanup chunk %d/%d failed; original chunk kept: %s", idx, len(chunks), exc)
+                cleaned_chunks.append(chunk)
+                fixes.append(msg)
+                continue
+            except Exception:
+                msg = "AI cleanup failed for one chunk; original Markdown was preserved."
+                logger.exception("Unexpected AI cleanup chunk %d/%d failure; original chunk kept.", idx, len(chunks))
                 cleaned_chunks.append(chunk)
                 fixes.append(msg)
                 continue
@@ -487,7 +604,16 @@ def _split_very_large_paragraph(text: str, max_chunk_chars: int) -> list[str]:
     current = ""
 
     for line in lines:
-        if not current:
+        if len(line) > max_chunk_chars:
+            if current.strip():
+                chunks.append(current.strip())
+                current = ""
+            chunks.extend(
+                line[start:start + max_chunk_chars].strip()
+                for start in range(0, len(line), max_chunk_chars)
+                if line[start:start + max_chunk_chars].strip()
+            )
+        elif not current:
             current = line
         elif len(current) + len(line) + 1 <= max_chunk_chars:
             current = f"{current}\n{line}"

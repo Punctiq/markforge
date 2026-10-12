@@ -4,8 +4,12 @@ import pytest
 
 SAMPLES = Path(__file__).parent.parent / "samples"
 
-def _post(client, filename, ai_cleanup="false"):
-    data = {"file": (BytesIO((SAMPLES/filename).read_bytes()), filename), "ai_cleanup": ai_cleanup}
+def _post(client, filename, ai_cleanup="false", output_format="markdown"):
+    data = {
+        "file": (BytesIO((SAMPLES/filename).read_bytes()), filename),
+        "ai_cleanup": ai_cleanup,
+        "output_format": output_format,
+    }
     return client.post("/api/v1/convert", data=data, content_type="multipart/form-data")
 
 def test_no_file_returns_400(client):

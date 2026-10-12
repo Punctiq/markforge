@@ -8,9 +8,35 @@ import os
 from pathlib import Path
 
 
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 class BaseConfig:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
     JSON_SORT_KEYS: bool = False
+    SESSION_COOKIE_HTTPONLY: bool = True
+    SESSION_COOKIE_SAMESITE: str = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+    SESSION_COOKIE_SECURE: bool = _bool_env("SESSION_COOKIE_SECURE", False)
+
+    # Personal-use authentication
+    AUTH_ENABLED: bool = _bool_env("AUTH_ENABLED", False)
+    AUTH_ALLOWED_EMAILS: str = os.getenv("AUTH_ALLOWED_EMAILS", "")
+    GOOGLE_OAUTH_CLIENT_ID: str = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+    GOOGLE_OAUTH_CLIENT_SECRET: str = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    GOOGLE_OAUTH_REDIRECT_URI: str = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
+    TRUST_PROXY: bool = _bool_env("TRUST_PROXY", False)
 
     # File handling
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
@@ -27,7 +53,8 @@ class BaseConfig:
     # LLM output limits
     # General cleanup can still use a larger completion budget, while
     # quality audit uses a smaller budget to avoid context overflow.
-    LLM_MAX_OUTPUT_TOKENS: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "8192"))
+    LLM_MAX_OUTPUT_TOKENS: int = _int_env("LLM_MAX_OUTPUT_TOKENS", 8192)
+    LLM_CLEANUP_CONTEXT_WINDOW_TOKENS: int = _int_env("LLM_CLEANUP_CONTEXT_WINDOW_TOKENS", 32000)
     AI_QUALITY_MAX_OUTPUT_TOKENS: int = int(os.getenv("AI_QUALITY_MAX_OUTPUT_TOKENS", "2048"))
     AI_QUALITY_SAFE_INPUT_TOKENS: int = int(os.getenv("AI_QUALITY_SAFE_INPUT_TOKENS", "24000"))
     AI_QUALITY_SAMPLE_CHARS: int = int(os.getenv("AI_QUALITY_SAMPLE_CHARS", "16000"))
